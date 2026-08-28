@@ -1,7 +1,7 @@
 import { checkAdmin, supabaseAdmin } from './_utils.js';
 import bcrypt from 'bcryptjs';
 
-const VALID_PERMS = ['questions', 'responses', 'requests', 'commercial', 'clients', 'meetings', 'contracts', 'admins', 'theme'];
+const VALID_PERMS = ['questions', 'responses', 'requests', 'commercial', 'clients', 'meetings', 'contracts', 'admins'];
 
 export default async function handler(req, res) {
   if (!(await checkAdmin(req, res, 'admins'))) return;

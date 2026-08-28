@@ -188,6 +188,7 @@ on conflict (id) do nothing;
 create table if not exists meeting_slots (
   id uuid primary key default gen_random_uuid(),
   start_time timestamptz not null,
+  end_time timestamptz not null,
   created_at timestamptz not null default now()
 );
 create table if not exists meeting_links (
@@ -200,18 +201,6 @@ create table if not exists meeting_bookings (
   user_id uuid not null references auth.users(id),
   booked_at timestamptz not null default now()
 );
-
--- منع نفس العميل من حجز أكتر من معاد واحد في نفس الوقت
--- (لو الجدول اتعمل قبل الإضافة دي، الكود ده بيضيف القيد بأمان من غير ما يكسر حاجة)
-do $$
-begin
-  if not exists (
-    select 1 from pg_constraint where conname = 'meeting_bookings_user_id_key'
-  ) then
-    alter table meeting_bookings add constraint meeting_bookings_user_id_key unique (user_id);
-  end if;
-end $$;
-
 
 alter table meeting_slots enable row level security;
 alter table meeting_links enable row level security;
@@ -247,6 +236,12 @@ create policy "client reads own link near meeting time"
         and s.start_time <= now() + interval '10 minutes'
     )
   );
+
+-- ============ PART 12 — تحويل مواعيد الميتينج لفترات (من ساعة لساعة) بدل معاد ثابت ============
+-- لو الجدول meeting_slots كان موجود من قبل من غير عمود end_time، شغّل السطرين دول:
+alter table meeting_slots add column if not exists end_time timestamptz;
+update meeting_slots set end_time = start_time + interval '1 hour' where end_time is null;
+alter table meeting_slots alter column end_time set not null;
 
 -- ============ PART 11 — العقد الإلكتروني ============
 create table if not exists contracts (

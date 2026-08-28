@@ -6,7 +6,7 @@ export default async function handler(req, res) {
 
   if (req.method === 'GET') {
     const { data: slots, error: slotsErr } = await supabase
-      .from('meeting_slots').select('id, start_time').order('start_time', { ascending: true });
+      .from('meeting_slots').select('id, start_time, end_time').order('start_time', { ascending: true });
     if (slotsErr) return res.status(500).json({ error: slotsErr.message });
 
     const { data: links } = await supabase.from('meeting_links').select('slot_id, link');
@@ -28,7 +28,7 @@ export default async function handler(req, res) {
     (bookings || []).forEach(b => { bookingsBySlot[b.slot_id] = { ...b, client: usersMap[b.user_id] || {} }; });
 
     const result = slots.map(s => ({
-      id: s.id, start_time: s.start_time, link: linkMap[s.id] || '', booking: bookingsBySlot[s.id] || null
+      id: s.id, start_time: s.start_time, end_time: s.end_time, link: linkMap[s.id] || '', booking: bookingsBySlot[s.id] || null
     }));
     return res.status(200).json({ ok: true, slots: result });
   }
@@ -37,23 +37,24 @@ export default async function handler(req, res) {
     const { action } = req.body || {};
 
     if (action === 'add') {
-      const { startTime, link } = req.body;
-      if (!startTime) return res.status(400).json({ error: 'بيانات ناقصة' });
-      const { data: slot, error: slotErr } = await supabase.from('meeting_slots').insert([{ start_time: startTime }]).select().single();
+      const { startTime, endTime, link } = req.body;
+      if (!startTime || !endTime || !link) return res.status(400).json({ error: 'بيانات ناقصة' });
+      if (new Date(endTime) <= new Date(startTime)) return res.status(400).json({ error: 'وقت النهاية لازم يكون بعد وقت البداية' });
+      const { data: slot, error: slotErr } = await supabase.from('meeting_slots').insert([{ start_time: startTime, end_time: endTime }]).select().single();
       if (slotErr) return res.status(500).json({ error: slotErr.message });
-      // الرابط اختياري: ممكن يتضاف بعدين من خلال "update" لو الأدمن حب يحدده لاحقًا
-      if (link && link.trim()) {
-        const { error: linkErr } = await supabase.from('meeting_links').insert([{ slot_id: slot.id, link: link.trim() }]);
-        if (linkErr) return res.status(500).json({ error: linkErr.message });
-      }
+      const { error: linkErr } = await supabase.from('meeting_links').insert([{ slot_id: slot.id, link }]);
+      if (linkErr) return res.status(500).json({ error: linkErr.message });
       return res.status(200).json({ ok: true, slot });
     }
 
     if (action === 'update') {
-      const { id, startTime, link } = req.body;
+      const { id, startTime, endTime, link } = req.body;
       if (!id) return res.status(400).json({ error: 'مفيش id' });
-      if (startTime) {
-        const { error } = await supabase.from('meeting_slots').update({ start_time: startTime }).eq('id', id);
+      if (startTime || endTime) {
+        const patch = {};
+        if (startTime) patch.start_time = startTime;
+        if (endTime) patch.end_time = endTime;
+        const { error } = await supabase.from('meeting_slots').update(patch).eq('id', id);
         if (error) return res.status(500).json({ error: error.message });
       }
       if (link) {
