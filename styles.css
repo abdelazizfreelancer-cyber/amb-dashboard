@@ -149,14 +149,6 @@ button.btn.danger{ border-color:var(--danger); color:var(--danger); }
 .status-pill.st-pending{ background:#fff3cd; color:#856404; }
 .status-pill.st-approved{ background:#d4edda; color:#155724; }
 .status-pill.st-denied{ background:#f8d7da; color:#721c24; }
-
-.hour-picker-label{ font-family:'Cairo'; font-weight:700; font-size:12.5px; color:var(--green-900); margin:14px 0 8px; }
-.hour-row{ display:flex; flex-wrap:wrap; gap:6px; }
-.hour-btn{ min-width:38px; padding:8px 0; border:1px solid var(--line); background:#fff; border-radius:8px; cursor:pointer; font-family:'Cairo'; font-size:13px; color:var(--ink); }
-.hour-btn.active{ background:var(--green-900); border-color:var(--green-900); color:#f4f2ea; }
-.ampm-row{ display:flex; gap:8px; margin-top:6px; }
-.ampm-btn{ padding:6px 16px; border:1px solid var(--line); background:#fff; border-radius:20px; cursor:pointer; font-family:'Cairo'; font-size:12px; color:var(--ink-dim); }
-.ampm-btn.active{ background:var(--gold); border-color:var(--gold); color:#1b1405; }
 .perm-chip{ display:inline-flex; align-items:center; gap:6px; font-family:'Cairo'; font-size:12px; color:var(--ink); background:#fff; border:1px solid var(--line); border-radius:16px; padding:6px 12px; cursor:pointer; }
 .perm-chip input{ width:auto; margin:0; }
 
@@ -189,3 +181,15 @@ button.btn.danger{ border-color:var(--danger); color:var(--danger); }
 .preview-q .ql{ font-family:'Cairo'; font-size:12.5px; font-weight:700; color:var(--ink-dim); margin-bottom:4px; }
 .preview-q .qa{ font-size:14px; color:var(--ink); line-height:1.9; background:#fff; border:1px solid var(--line); border-radius:8px; padding:10px 14px; }
 .preview-q .qa.empty{ color:#b7b2a6; font-style:italic; }
+
+/* ===== Time Picker (اختيار ساعة المعاد بدون فورمات 24 ساعة) ===== */
+.time-picker{ background:#fff; border:1px solid var(--line); border-radius:10px; padding:16px 18px; margin-top:10px; }
+.time-picker-label{ font-family:'Cairo'; font-size:12px; font-weight:700; color:var(--ink-dim); margin-bottom:10px; }
+.time-picker-row{ display:grid; grid-template-columns:repeat(6, 1fr); gap:8px; margin-bottom:8px; }
+.hour-btn{ font-family:'Cairo'; font-weight:700; font-size:14px; padding:10px 0; border-radius:8px; border:1px solid var(--line); background:#fff; color:var(--ink); cursor:pointer; transition:.15s; }
+.hour-btn:hover{ border-color:var(--gold); }
+.hour-btn.active{ background:var(--green-900); border-color:var(--green-900); color:var(--gold-light); }
+.ampm-toggle{ display:flex; gap:8px; margin:12px 0 10px; }
+.ampm-btn{ flex:1; font-family:'Cairo'; font-weight:700; font-size:13px; padding:9px 0; border-radius:20px; border:1px solid var(--line); background:#fff; color:var(--ink-dim); cursor:pointer; transition:.15s; }
+.ampm-btn.active{ background:var(--gold); border-color:var(--gold); color:#1f1503; }
+.time-picker-preview{ font-family:'Cairo'; font-size:13px; font-weight:700; color:var(--green-900); text-align:center; padding-top:6px; border-top:1px dashed var(--line); }

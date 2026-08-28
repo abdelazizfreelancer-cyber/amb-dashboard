@@ -36,7 +36,8 @@ const PERMISSION_LABELS = {
   clients: 'بيانات العملاء (الشيت)',
   meetings: 'المواعيد',
   contracts: 'العقود',
-  admins: 'المشرفين'
+  admins: 'المشرفين',
+  theme: 'شكل الموقع'
 };
 function hasPerm(p){ return adminPermissions === 'all' || adminPermissions.includes(p); }
 
@@ -109,6 +110,7 @@ async function renderAdminRoot(){
     { key:'clients', label:'بيانات العملاء' },
     { key:'meetings', label:'المواعيد' },
     { key:'contracts', label:'العقود' },
+    { key:'theme', label:'شكل الموقع' },
     { key:'admins', label:'الحسابات' }
   ].filter(t => hasPerm(t.key));
 
@@ -142,6 +144,7 @@ async function renderAdminRoot(){
   else if(adminSubTab === 'clients') renderClientsSheetTab();
   else if(adminSubTab === 'meetings') renderMeetingsAdmin();
   else if(adminSubTab === 'contracts') renderContractsAdmin();
+  else if(adminSubTab === 'theme') renderThemeEditor();
   else renderCommercialEditor();
 }
 
@@ -166,29 +169,6 @@ function renderClientsSheetTab(){
 
 /* ===================== MEETINGS ADMIN ===================== */
 const WEEKDAY_NAMES = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
-const HOUR_LABELS = [12,1,2,3,4,5,6,7,8,9,10,11]; // 12 كبداية للساعة بتاعة الظهر/نص الليل
-
-let newSlotStartHour = null, newSlotStartAmpm = 'م';
-let newSlotEndHour = null, newSlotEndAmpm = 'م';
-
-function hourRowHtml(rowId, selectedHour, selectedAmpm){
-  return `
-    <div class="hour-row" id="${rowId}">
-      ${HOUR_LABELS.map(h => `<button type="button" class="hour-btn ${selectedHour===h?'active':''}" data-hour="${h}">${h}</button>`).join('')}
-    </div>
-    <div class="ampm-row" data-for="${rowId}">
-      <button type="button" class="ampm-btn ${selectedAmpm==='ص'?'active':''}" data-ampm="ص">صباحًا</button>
-      <button type="button" class="ampm-btn ${selectedAmpm==='م'?'active':''}" data-ampm="م">مساءً</button>
-    </div>
-  `;
-}
-
-// بيحول (ساعة 12/1/2../11 + ص أو م) لساعة 24 ساعة فعلية
-function hour12ToHour24(hour12, ampm){
-  let h = hour12 % 12; // 12 -> 0
-  if(ampm === 'م') h += 12; // مساءً: +12 (12م تفضل 12 ظهرًا)
-  return h;
-}
 
 async function renderMeetingsAdmin(){
   const inner = document.getElementById('adminInner');
@@ -210,25 +190,44 @@ async function renderMeetingsAdmin(){
   });
   const sortedDates = Object.keys(grouped).sort();
 
-  const now = new Date();
-
   inner.innerHTML = `
     <div class="qs-section">
-      <h3 style="font-family:'Cairo';font-size:15px;color:var(--green-900);margin-bottom:14px;">إضافة فترة فاضية جديدة</h3>
+      <h3 style="font-family:'Cairo';font-size:15px;color:var(--green-900);margin-bottom:14px;">إضافة معاد جديد</h3>
       <div class="row">
         <input type="date" id="newSlotDate">
       </div>
-
-      <div class="hour-picker-label">من الساعة</div>
-      ${hourRowHtml('startHourRow', newSlotStartHour, newSlotStartAmpm)}
-
-      <div class="hour-picker-label">لحد الساعة</div>
-      ${hourRowHtml('endHourRow', newSlotEndHour, newSlotEndAmpm)}
-
-      <div class="row" style="margin-top:12px;">
-        <input type="text" id="newSlotLink" placeholder="رابط الميتينج (Zoom, Meet...)">
+      <div class="time-picker" id="timePickerStart">
+        <div class="time-picker-label">من الساعة (بداية الميتينج)</div>
+        <div class="time-picker-row">
+          ${[12,1,2,3,4,5].map(h => `<button type="button" class="hour-btn start-hour-btn" data-hour="${h}">${h}</button>`).join('')}
+        </div>
+        <div class="time-picker-row">
+          ${[6,7,8,9,10,11].map(h => `<button type="button" class="hour-btn start-hour-btn" data-hour="${h}">${h}</button>`).join('')}
+        </div>
+        <div class="ampm-toggle">
+          <button type="button" class="ampm-btn start-ampm-btn active" data-ampm="AM">صباحًا</button>
+          <button type="button" class="ampm-btn start-ampm-btn" data-ampm="PM">مساءً</button>
+        </div>
       </div>
-      <button class="btn primary small" id="addSlotBtn" style="margin-top:10px;">إضافة الفترة</button>
+      <div class="time-picker" id="timePickerEnd" style="margin-top:10px;">
+        <div class="time-picker-label">لحد الساعة (نهاية الميتينج — اختياري)</div>
+        <button type="button" class="hour-btn end-hour-btn active" data-hour="" style="width:100%;margin-bottom:8px;">بدون تحديد نهاية</button>
+        <div class="time-picker-row">
+          ${[12,1,2,3,4,5].map(h => `<button type="button" class="hour-btn end-hour-btn" data-hour="${h}">${h}</button>`).join('')}
+        </div>
+        <div class="time-picker-row">
+          ${[6,7,8,9,10,11].map(h => `<button type="button" class="hour-btn end-hour-btn" data-hour="${h}">${h}</button>`).join('')}
+        </div>
+        <div class="ampm-toggle">
+          <button type="button" class="ampm-btn end-ampm-btn active" data-ampm="AM">صباحًا</button>
+          <button type="button" class="ampm-btn end-ampm-btn" data-ampm="PM">مساءً</button>
+        </div>
+      </div>
+      <div class="time-picker-preview" id="timePickerPreview" style="margin-top:10px;">من فضلك اختار الساعة</div>
+      <div class="row" style="margin-top:10px;">
+        <input type="text" id="newSlotLink" placeholder="رابط الميتينج (اختياري — ممكن تحطه بعدين)">
+      </div>
+      <button class="btn primary small" id="addSlotBtn" style="margin-top:10px;">إضافة المعاد</button>
     </div>
     ${sortedDates.length === 0 ? `<div class="admin-empty">مفيش مواعيد متضافة لسه.</div>` : sortedDates.map(dateKey => {
       const d = new Date(dateKey);
@@ -237,22 +236,19 @@ async function renderMeetingsAdmin(){
         <div class="qs-section">
           <h3 style="font-family:'Cairo';font-size:15px;color:var(--green-900);margin-bottom:12px;">${dayName} — ${d.toLocaleDateString('ar-EG')}</h3>
           ${grouped[dateKey].map(s => {
-            const startT = new Date(s.start_time).toLocaleTimeString('ar-EG', { hour:'2-digit', minute:'2-digit' });
-            const endT = new Date(s.end_time).toLocaleTimeString('ar-EG', { hour:'2-digit', minute:'2-digit' });
+            const startTxt = new Date(s.start_time).toLocaleTimeString('ar-EG', { hour:'2-digit', minute:'2-digit' });
+            const timeLabel = s.end_time
+              ? `${startTxt} – ${new Date(s.end_time).toLocaleTimeString('ar-EG', { hour:'2-digit', minute:'2-digit' })}`
+              : startTxt;
             const booked = s.booking;
-            const expired = !booked && new Date(s.end_time) < now;
-            let statusHtml;
-            if(booked) statusHtml = `<span class="status-pill st-approved">محجوز</span>`;
-            else if(expired) statusHtml = `<span class="status-pill st-denied">انتهى</span>`;
-            else statusHtml = `<span class="status-pill st-pending">متاح</span>`;
             return `
-              <div class="q-row" data-id="${s.id}" style="${expired?'opacity:.55;':''}">
+              <div class="q-row" data-id="${s.id}">
                 <div class="q-row-text">
-                  <div class="qlabel">${startT} — ${endT} ${statusHtml}</div>
-                  <div class="qmeta">${s.link}${booked ? ` · حجزه: ${booked.client.name || 'بدون اسم'} (${booked.client.phone||'—'})` : ''}</div>
+                  <div class="qlabel">${timeLabel} ${booked ? `<span class="status-pill st-approved">محجوز</span>` : `<span class="status-pill st-pending">متاح</span>`}</div>
+                  <div class="qmeta">${s.link ? s.link : '<em>من غير رابط ميتينج — حط الرابط بعدين لو حبيت</em>'}${booked ? ` · حجزه: ${booked.client.name || 'بدون اسم'} (${booked.client.phone||'—'})` : ''}</div>
                 </div>
                 <div class="q-row-actions">
-                  <button class="del-btn delSlotBtn" data-id="${s.id}" title="مسح الفترة">✕</button>
+                  <button class="del-btn delSlotBtn" data-id="${s.id}" title="مسح المعاد">✕</button>
                 </div>
               </div>
             `;
@@ -262,50 +258,214 @@ async function renderMeetingsAdmin(){
     }).join('')}
   `;
 
-  inner.querySelectorAll('#startHourRow .hour-btn').forEach(btn => {
-    btn.addEventListener('click', () => { newSlotStartHour = Number(btn.dataset.hour); renderMeetingsAdmin(); });
+  let selectedStartHour12 = null; // 1..12
+  let selectedStartAmPm = 'AM';
+  let selectedEndHour12 = null; // null = بدون تحديد نهاية
+  let selectedEndAmPm = 'AM';
+
+  document.querySelectorAll('.start-hour-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.start-hour-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      selectedStartHour12 = parseInt(btn.dataset.hour, 10);
+      updateTimePickerPreview();
+    });
   });
-  inner.querySelectorAll('.ampm-row[data-for="startHourRow"] .ampm-btn').forEach(btn => {
-    btn.addEventListener('click', () => { newSlotStartAmpm = btn.dataset.ampm; renderMeetingsAdmin(); });
+  document.querySelectorAll('.start-ampm-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.start-ampm-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      selectedStartAmPm = btn.dataset.ampm;
+      updateTimePickerPreview();
+    });
   });
-  inner.querySelectorAll('#endHourRow .hour-btn').forEach(btn => {
-    btn.addEventListener('click', () => { newSlotEndHour = Number(btn.dataset.hour); renderMeetingsAdmin(); });
+  document.querySelectorAll('.end-hour-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.end-hour-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      selectedEndHour12 = btn.dataset.hour ? parseInt(btn.dataset.hour, 10) : null;
+      updateTimePickerPreview();
+    });
   });
-  inner.querySelectorAll('.ampm-row[data-for="endHourRow"] .ampm-btn').forEach(btn => {
-    btn.addEventListener('click', () => { newSlotEndAmpm = btn.dataset.ampm; renderMeetingsAdmin(); });
+  document.querySelectorAll('.end-ampm-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.end-ampm-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      selectedEndAmPm = btn.dataset.ampm;
+      updateTimePickerPreview();
+    });
   });
 
-  document.getElementById('addSlotBtn').addEventListener('click', async (e) => {
-    const dateVal = document.getElementById('newSlotDate').value;
-    const link = document.getElementById('newSlotLink').value.trim();
-    if(!dateVal || newSlotStartHour===null || newSlotEndHour===null || !link){
-      alert('اختار اليوم، من الساعة، لحد الساعة، واكتب رابط الميتينج');
-      return;
+  function updateTimePickerPreview(){
+    const el = document.getElementById('timePickerPreview');
+    if(!el) return;
+    if(selectedStartHour12 === null){ el.textContent = 'من فضلك اختار الساعة'; return; }
+    let txt = `من الساعة ${selectedStartHour12} ${selectedStartAmPm === 'AM' ? 'صباحًا' : 'مساءً'}`;
+    if(selectedEndHour12 !== null){
+      txt += ` — لحد ${selectedEndHour12} ${selectedEndAmPm === 'AM' ? 'صباحًا' : 'مساءً'}`;
     }
-    const startHour24 = hour12ToHour24(newSlotStartHour, newSlotStartAmpm);
-    const endHour24 = hour12ToHour24(newSlotEndHour, newSlotEndAmpm);
-    const startDate = new Date(dateVal + 'T00:00:00');
-    startDate.setHours(startHour24, 0, 0, 0);
-    const endDate = new Date(dateVal + 'T00:00:00');
-    endDate.setHours(endHour24, 0, 0, 0);
-    if(endDate <= startDate){ alert('وقت النهاية لازم يكون بعد وقت البداية'); return; }
+    el.textContent = txt;
+  }
+
+  document.getElementById('addSlotBtn').addEventListener('click', async (e) => {
+    const dateVal = document.getElementById('newSlotDate').value; // YYYY-MM-DD
+    const link = document.getElementById('newSlotLink').value.trim();
+    if(!dateVal || selectedStartHour12 === null){ alert('اختار التاريخ وساعة البداية'); return; }
+
+    // تحويل 12 ساعة (+صباحًا/مساءً) لصيغة 24 ساعة
+    let startHour24 = selectedStartHour12 % 12; // 12 -> 0
+    if(selectedStartAmPm === 'PM') startHour24 += 12;
+    const startDateTimeStr = `${dateVal}T${String(startHour24).padStart(2,'0')}:00:00`;
+
+    let endDateTimeStr = null;
+    if(selectedEndHour12 !== null){
+      let endHour24 = selectedEndHour12 % 12;
+      if(selectedEndAmPm === 'PM') endHour24 += 12;
+      endDateTimeStr = `${dateVal}T${String(endHour24).padStart(2,'0')}:00:00`;
+    }
 
     const btnEl = e.target;
     btnEl.disabled = true; btnEl.textContent = "جاري الإضافة...";
-    const result = await adminFetch('/api/meetings', { action: 'add', startTime: startDate.toISOString(), endTime: endDate.toISOString(), link });
-    btnEl.disabled = false; btnEl.textContent = "إضافة الفترة";
-    if(result && result.ok){
-      newSlotStartHour = null; newSlotEndHour = null;
-      renderMeetingsAdmin();
-    }
+    const result = await adminFetch('/api/meetings', {
+      action: 'add',
+      startTime: new Date(startDateTimeStr).toISOString(),
+      endTime: endDateTimeStr ? new Date(endDateTimeStr).toISOString() : null,
+      link: link || null
+    });
+    btnEl.disabled = false; btnEl.textContent = "إضافة المعاد";
+    if(result && result.ok){ renderMeetingsAdmin(); }
     else{ alert('حصل خطأ: ' + ((result && result.error) || 'خطأ غير معروف')); }
   });
   inner.querySelectorAll('.delSlotBtn').forEach(btn => {
     btn.addEventListener('click', async (e) => {
-      if(!confirm('متأكد إنك عايز تمسح الفترة دي؟')) return;
+      if(!confirm('متأكد إنك عايز تمسح المعاد ده؟')) return;
       await adminFetch('/api/meetings', { action: 'delete', id: e.target.dataset.id });
       renderMeetingsAdmin();
     });
+  });
+}
+
+const THEME_FONTS = ['Cairo', 'Almarai', 'Tajawal', 'Changa', 'IBM Plex Sans Arabic', 'El Messiri', 'Reem Kufi'];
+const THEME_DEFAULTS = { primaryColor:'#143331', accentColor:'#c08829', headingFont:'Cairo', bodyFont:'Almarai' };
+let currentThemeConfig = { ...THEME_DEFAULTS };
+
+async function loadCurrentThemeConfig(){
+  const { data } = await supabaseClient.from('site_settings').select('value').eq('key','theme_config').maybeSingle();
+  if(data && data.value){
+    try{ currentThemeConfig = { ...THEME_DEFAULTS, ...JSON.parse(data.value) }; }
+    catch(e){ currentThemeConfig = { ...THEME_DEFAULTS }; }
+  } else {
+    currentThemeConfig = { ...THEME_DEFAULTS };
+  }
+}
+
+async function renderThemeEditor(){
+  const inner = document.getElementById('adminInner');
+  inner.innerHTML = `<div class="load-msg">جاري تحميل إعدادات الشكل...</div>`;
+  await loadCurrentThemeConfig();
+  const cfg = currentThemeConfig;
+
+  inner.innerHTML = `
+    <div class="qs-section">
+      <h3 style="font-family:'Cairo';font-size:15px;color:var(--green-900);margin-bottom:8px;">شكل الموقع</h3>
+      <p style="font-size:12px;color:var(--ink-dim);margin-bottom:16px;">غيّر لون الموقع الأساسي، لون التمييز (الدهبي)، وخطوط العناوين والنصوص. أي تغيير بيتطبق على موقع العميل مباشرة بعد الحفظ، من غير ما تحتاج ترفع أي ملفات.</p>
+
+      <div class="row" style="align-items:center;display:flex;gap:14px;">
+        <div style="flex:1;">
+          <label style="font-family:'Cairo';font-size:12px;font-weight:700;display:block;margin-bottom:6px;">اللون الأساسي</label>
+          <input type="color" id="themePrimaryColor" value="${cfg.primaryColor}" style="width:100%;height:42px;padding:2px;cursor:pointer;">
+        </div>
+        <div style="flex:1;">
+          <label style="font-family:'Cairo';font-size:12px;font-weight:700;display:block;margin-bottom:6px;">لون التمييز (الدهبي)</label>
+          <input type="color" id="themeAccentColor" value="${cfg.accentColor}" style="width:100%;height:42px;padding:2px;cursor:pointer;">
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:14px;display:flex;gap:14px;">
+        <div style="flex:1;">
+          <label style="font-family:'Cairo';font-size:12px;font-weight:700;display:block;margin-bottom:6px;">خط العناوين</label>
+          <select id="themeHeadingFont">
+            ${THEME_FONTS.map(f => `<option value="${f}" ${f===cfg.headingFont?'selected':''}>${f}</option>`).join('')}
+          </select>
+        </div>
+        <div style="flex:1;">
+          <label style="font-family:'Cairo';font-size:12px;font-weight:700;display:block;margin-bottom:6px;">خط النصوص</label>
+          <select id="themeBodyFont">
+            ${THEME_FONTS.map(f => `<option value="${f}" ${f===cfg.bodyFont?'selected':''}>${f}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+
+      <div id="themePreviewBox" style="margin-top:18px;padding:22px;border-radius:12px;border:1px solid var(--line);">
+        <div id="themePreviewHeading" style="font-size:18px;font-weight:800;margin-bottom:6px;">كده هيبقى شكل العناوين</div>
+        <div id="themePreviewBody" style="font-size:14px;margin-bottom:14px;">وده شكل النصوص العادية في الموقع.</div>
+        <button type="button" id="themePreviewBtn" style="border:none;padding:10px 20px;border-radius:8px;font-weight:700;cursor:default;">زرار تجريبي</button>
+      </div>
+
+      <button class="btn primary small" id="saveThemeBtn" style="margin-top:16px;">حفظ شكل الموقع</button>
+      <button class="btn small" id="resetThemeBtn" style="margin-top:16px;">رجوع للشكل الافتراضي</button>
+      <div id="themeStatus" style="font-size:12px;color:var(--ink-dim);margin-top:8px;"></div>
+    </div>
+  `;
+
+  function readThemeFormValues(){
+    return {
+      primaryColor: document.getElementById('themePrimaryColor').value,
+      accentColor: document.getElementById('themeAccentColor').value,
+      headingFont: document.getElementById('themeHeadingFont').value,
+      bodyFont: document.getElementById('themeBodyFont').value
+    };
+  }
+  function ensurePreviewFontLoaded(fontName){
+    const id = 'theme-preview-font-' + fontName.replace(/\s+/g,'-');
+    if(document.getElementById(id)) return;
+    const link = document.createElement('link');
+    link.id = id; link.rel = 'stylesheet';
+    link.href = `https://fonts.googleapis.com/css2?family=${encodeURIComponent(fontName)}:wght@400;700;800&display=swap`;
+    document.head.appendChild(link);
+  }
+  function updatePreview(){
+    const v = readThemeFormValues();
+    ensurePreviewFontLoaded(v.headingFont);
+    ensurePreviewFontLoaded(v.bodyFont);
+    const box = document.getElementById('themePreviewBox');
+    const heading = document.getElementById('themePreviewHeading');
+    const body = document.getElementById('themePreviewBody');
+    const btn = document.getElementById('themePreviewBtn');
+    box.style.background = '#fff';
+    heading.style.color = v.primaryColor;
+    heading.style.fontFamily = `'${v.headingFont}'`;
+    body.style.fontFamily = `'${v.bodyFont}'`;
+    btn.style.background = v.primaryColor;
+    btn.style.color = v.accentColor;
+  }
+  ['themePrimaryColor','themeAccentColor','themeHeadingFont','themeBodyFont'].forEach(id => {
+    document.getElementById(id).addEventListener('input', updatePreview);
+  });
+  updatePreview();
+
+  document.getElementById('saveThemeBtn').addEventListener('click', async (e) => {
+    const v = readThemeFormValues();
+    const statusEl = document.getElementById('themeStatus');
+    const btnEl = e.target;
+    btnEl.disabled = true; btnEl.textContent = "جاري الحفظ...";
+    const result = await adminFetch('/api/settings', { key: 'theme_config', value: JSON.stringify(v) });
+    btnEl.disabled = false; btnEl.textContent = "حفظ شكل الموقع";
+    statusEl.textContent = (result && result.ok) ? "اتحفظ ✓ — افتح موقع العميل عشان تشوف الشكل الجديد" : "حصل خطأ، حاول تاني";
+  });
+  document.getElementById('resetThemeBtn').addEventListener('click', async (e) => {
+    if(!confirm('متأكد عايز ترجع لشكل الموقع الافتراضي؟')) return;
+    document.getElementById('themePrimaryColor').value = THEME_DEFAULTS.primaryColor;
+    document.getElementById('themeAccentColor').value = THEME_DEFAULTS.accentColor;
+    document.getElementById('themeHeadingFont').value = THEME_DEFAULTS.headingFont;
+    document.getElementById('themeBodyFont').value = THEME_DEFAULTS.bodyFont;
+    updatePreview();
+    const statusEl = document.getElementById('themeStatus');
+    const btnEl = e.target;
+    btnEl.disabled = true; btnEl.textContent = "جاري الحفظ...";
+    const result = await adminFetch('/api/settings', { key: 'theme_config', value: JSON.stringify(THEME_DEFAULTS) });
+    btnEl.disabled = false; btnEl.textContent = "رجوع للشكل الافتراضي";
+    statusEl.textContent = (result && result.ok) ? "رجع للشكل الافتراضي ✓" : "حصل خطأ، حاول تاني";
   });
 }
 
@@ -682,10 +842,15 @@ async function renderBriefRequests(){
 
 /* ===================== ADMINS MANAGER (الحسابات) ===================== */
 let currentSitePhoto = null;
+let currentMetaPixelId = '';
 
 async function loadCurrentSitePhoto(){
   const { data } = await supabaseClient.from('site_settings').select('value').eq('key','about_photo_url').maybeSingle();
   currentSitePhoto = (data && data.value) || 'assets-preview-fallback';
+}
+async function loadCurrentMetaPixelId(){
+  const { data } = await supabaseClient.from('site_settings').select('value').eq('key','meta_pixel_id').maybeSingle();
+  currentMetaPixelId = (data && data.value) || '';
 }
 
 async function renderAdminsManager(){
@@ -693,6 +858,7 @@ async function renderAdminsManager(){
   inner.innerHTML = `<div class="load-msg">جاري تحميل الحسابات...</div>`;
   let admins = [];
   await loadCurrentSitePhoto();
+  await loadCurrentMetaPixelId();
   try{
     const r = await fetch('/api/admins', { headers: { 'x-admin-password': adminPassword } });
     if(r.status === 401){ adminAuthed=false; adminPassword=null; renderAdminGate(); return; }
@@ -711,6 +877,16 @@ async function renderAdminsManager(){
           <div id="sitePhotoStatus" style="font-size:12px;color:var(--ink-dim);margin-top:6px;"></div>
         </div>
       </div>
+    </div>
+
+    <div class="qs-section">
+      <h3 style="font-family:'Cairo';font-size:15px;color:var(--green-900);margin-bottom:8px;">ربط الموقع بـ Meta Pixel (فيسبوك/إنستجرام)</h3>
+      <p style="font-size:12px;color:var(--ink-dim);margin-bottom:12px;">حط رقم الـ Pixel ID بتاعك من Meta Events Manager، وهيتظهّر أوتوماتيك في موقع العميل عشان تقدر تعمل إعلانات وتتابع الزيارات والبريفات اللي بتوصل.</p>
+      <div class="row">
+        <input type="text" id="metaPixelInput" placeholder="مثال: 1234567890123456" value="${currentMetaPixelId}">
+      </div>
+      <button class="btn primary small" id="saveMetaPixelBtn" style="margin-top:10px;">حفظ</button>
+      <div id="metaPixelStatus" style="font-size:12px;color:var(--ink-dim);margin-top:6px;"></div>
     </div>
 
     <p style="font-size:12px;color:var(--ink-dim);margin:20px 0 16px;">"الأدمن الرئيسي" باسوردته متسجلة في Vercel وعنده كل الصلاحيات دايمًا. من هنا تقدر تضيف مشرفين تانيين وتحدد كل واحد يشوف ويتحكم في إيه بالظبط.</p>
@@ -759,6 +935,17 @@ async function renderAdminsManager(){
 
   document.getElementById('changeSitePhotoBtn').addEventListener('click', () => document.getElementById('sitePhotoInput').click());
   document.getElementById('sitePhotoInput').addEventListener('change', handleSitePhotoUpload);
+
+  document.getElementById('saveMetaPixelBtn').addEventListener('click', async (e) => {
+    const val = document.getElementById('metaPixelInput').value.trim();
+    const statusEl = document.getElementById('metaPixelStatus');
+    const btnEl = e.target;
+    btnEl.disabled = true; btnEl.textContent = "جاري الحفظ...";
+    const result = await adminFetch('/api/settings', { key: 'meta_pixel_id', value: val });
+    btnEl.disabled = false; btnEl.textContent = "حفظ";
+    if(result && result.ok){ statusEl.textContent = val ? "تم الربط ✓ — هيظهر في موقع العميل من غير ما تعمل حاجة تانية" : "تم مسح الـ Pixel ID"; }
+    else{ statusEl.textContent = "حصل خطأ، حاول تاني"; }
+  });
 
   document.getElementById('addAdminBtn').addEventListener('click', async (e) => {
     const name = document.getElementById('newAdminName').value.trim();

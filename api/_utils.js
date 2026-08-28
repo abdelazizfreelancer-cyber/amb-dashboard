@@ -6,7 +6,8 @@ export function supabaseAdmin() {
 }
 
 // permission: null (بس تحقق من تسجيل الدخول) أو واحد من:
-// 'questions' | 'responses' | 'requests' | 'commercial' | 'admins'
+// 'questions' | 'responses' | 'requests' | 'commercial' | 'clients' | 'meetings' | 'contracts' | 'admins' | 'theme'
+// ممكن كمان تبعت array من الصلاحيات، وهيقبل لو عند المشرف واحدة منهم على الأقل
 export async function checkAdmin(req, res, permission = null) {
   const pass = req.headers['x-admin-password'];
   if (!pass) { res.status(401).json({ error: 'غير مصرح' }); return false; }
@@ -20,9 +21,11 @@ export async function checkAdmin(req, res, permission = null) {
 
   if (!match) { res.status(401).json({ error: 'غير مصرح' }); return false; }
 
-  if (permission && !(match.permissions || []).includes(permission)) {
-    res.status(403).json({ error: 'مفيش عندك صلاحية تعمل الإجراء ده' });
-    return false;
+  if (permission) {
+    const required = Array.isArray(permission) ? permission : [permission];
+    const granted = match.permissions || [];
+    const ok = required.some(p => granted.includes(p));
+    if (!ok) { res.status(403).json({ error: 'مفيش عندك صلاحية تعمل الإجراء ده' }); return false; }
   }
   return true;
 }

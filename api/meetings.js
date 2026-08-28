@@ -38,23 +38,22 @@ export default async function handler(req, res) {
 
     if (action === 'add') {
       const { startTime, endTime, link } = req.body;
-      if (!startTime || !endTime || !link) return res.status(400).json({ error: 'بيانات ناقصة' });
-      if (new Date(endTime) <= new Date(startTime)) return res.status(400).json({ error: 'وقت النهاية لازم يكون بعد وقت البداية' });
-      const { data: slot, error: slotErr } = await supabase.from('meeting_slots').insert([{ start_time: startTime, end_time: endTime }]).select().single();
+      if (!startTime) return res.status(400).json({ error: 'بيانات ناقصة' });
+      const { data: slot, error: slotErr } = await supabase.from('meeting_slots').insert([{ start_time: startTime, end_time: endTime || null }]).select().single();
       if (slotErr) return res.status(500).json({ error: slotErr.message });
-      const { error: linkErr } = await supabase.from('meeting_links').insert([{ slot_id: slot.id, link }]);
-      if (linkErr) return res.status(500).json({ error: linkErr.message });
+      // الرابط اختياري: ممكن يتضاف بعدين من خلال "update" لو الأدمن حب يحدده لاحقًا
+      if (link && link.trim()) {
+        const { error: linkErr } = await supabase.from('meeting_links').insert([{ slot_id: slot.id, link: link.trim() }]);
+        if (linkErr) return res.status(500).json({ error: linkErr.message });
+      }
       return res.status(200).json({ ok: true, slot });
     }
 
     if (action === 'update') {
       const { id, startTime, endTime, link } = req.body;
       if (!id) return res.status(400).json({ error: 'مفيش id' });
-      if (startTime || endTime) {
-        const patch = {};
-        if (startTime) patch.start_time = startTime;
-        if (endTime) patch.end_time = endTime;
-        const { error } = await supabase.from('meeting_slots').update(patch).eq('id', id);
+      if (startTime) {
+        const { error } = await supabase.from('meeting_slots').update({ start_time: startTime, end_time: endTime || null }).eq('id', id);
         if (error) return res.status(500).json({ error: error.message });
       }
       if (link) {
