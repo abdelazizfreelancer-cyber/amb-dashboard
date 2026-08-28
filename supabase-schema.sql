@@ -201,6 +201,18 @@ create table if not exists meeting_bookings (
   booked_at timestamptz not null default now()
 );
 
+-- منع نفس العميل من حجز أكتر من معاد واحد في نفس الوقت
+-- (لو الجدول اتعمل قبل الإضافة دي، الكود ده بيضيف القيد بأمان من غير ما يكسر حاجة)
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'meeting_bookings_user_id_key'
+  ) then
+    alter table meeting_bookings add constraint meeting_bookings_user_id_key unique (user_id);
+  end if;
+end $$;
+
+
 alter table meeting_slots enable row level security;
 alter table meeting_links enable row level security;
 alter table meeting_bookings enable row level security;

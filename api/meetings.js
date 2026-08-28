@@ -38,11 +38,14 @@ export default async function handler(req, res) {
 
     if (action === 'add') {
       const { startTime, link } = req.body;
-      if (!startTime || !link) return res.status(400).json({ error: 'بيانات ناقصة' });
+      if (!startTime) return res.status(400).json({ error: 'بيانات ناقصة' });
       const { data: slot, error: slotErr } = await supabase.from('meeting_slots').insert([{ start_time: startTime }]).select().single();
       if (slotErr) return res.status(500).json({ error: slotErr.message });
-      const { error: linkErr } = await supabase.from('meeting_links').insert([{ slot_id: slot.id, link }]);
-      if (linkErr) return res.status(500).json({ error: linkErr.message });
+      // الرابط اختياري: ممكن يتضاف بعدين من خلال "update" لو الأدمن حب يحدده لاحقًا
+      if (link && link.trim()) {
+        const { error: linkErr } = await supabase.from('meeting_links').insert([{ slot_id: slot.id, link: link.trim() }]);
+        if (linkErr) return res.status(500).json({ error: linkErr.message });
+      }
       return res.status(200).json({ ok: true, slot });
     }
 
