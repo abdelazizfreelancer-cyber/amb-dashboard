@@ -170,27 +170,108 @@ function renderClientsSheetTab(){
 /* ===================== MEETINGS ADMIN ===================== */
 const WEEKDAY_NAMES = ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
 
-async function renderMeetingsAdmin(){
-  const inner = document.getElementById('adminInner');
-  inner.innerHTML = `<div class="load-msg">جاري تحميل المواعيد...</div>`;
-  let slots = [];
+let meetingSlots = [];        // آخر نسخة منشورة فعليًا (جاية من السيرفر)
+let pendingMeetingOps = [];   // مواعيد لسه ماتنشرتش (add/delete) — بتتبعت لـ Supabase دفعة واحدة لما تدوس "نشر"
+let meetingTempIdCounter = 0;
+
+async function loadMeetingsData(){
   try{
     const r = await fetch('/api/meetings', { headers: { 'x-admin-password': adminPassword } });
-    if(r.status === 401){ adminAuthed=false; adminPassword=null; renderAdminGate(); return; }
+    if(r.status === 401){ adminAuthed=false; adminPassword=null; renderAdminGate(); return false; }
     const json = await r.json();
-    slots = json.slots || [];
-  }catch(err){ inner.innerHTML = `<div class="admin-empty">حصل خطأ في تحميل المواعيد.</div>`; return; }
+    meetingSlots = json.slots || [];
+    return true;
+  }catch(err){ return false; }
+}
+function isTempMeetingId(id){ return typeof id === 'string' && id.startsWith('temp-'); }
+function computeDraftMeetings(){
+  let draft = meetingSlots.map(s => ({ ...s }));
+  pendingMeetingOps.forEach(op => {
+    if(op.action === 'delete'){
+      draft = draft.filter(s => s.id !== op.id);
+    } else if(op.action === 'add'){
+      draft.push({ id: op.tempId, start_time: op.startTime, end_time: op.endTime, link: op.link || '', booking: null, _pending:true });
+    }
+  });
+  return draft;
+}
+function queueMeetingDelete(id){
+  if(isTempMeetingId(id)){
+    pendingMeetingOps = pendingMeetingOps.filter(op => !(op.action === 'add' && op.tempId === id));
+    return;
+  }
+  if(!pendingMeetingOps.some(op => op.action === 'delete' && op.id === id)){
+    pendingMeetingOps.push({ action:'delete', id });
+  }
+}
+function queueMeetingAdd(startTime, endTime, link){
+  const tempId = `temp-${++meetingTempIdCounter}`;
+  pendingMeetingOps.push({ action:'add', tempId, startTime, endTime, link });
+  return tempId;
+}
+async function publishMeetingChanges(){
+  if(pendingMeetingOps.length === 0) return;
+  const btnEl = document.getElementById('publishMeetingsBtn');
+  const discardEl = document.getElementById('discardMeetingsBtn');
+  btnEl.disabled = true; btnEl.textContent = "جاري النشر...";
+  if(discardEl) discardEl.disabled = true;
+  for(const op of pendingMeetingOps){
+    let result;
+    if(op.action === 'add'){
+      result = await adminFetch('/api/meetings', { action:'add', startTime: op.startTime, endTime: op.endTime, link: op.link || null });
+    } else if(op.action === 'delete'){
+      result = await adminFetch('/api/meetings', { action:'delete', id: op.id });
+    }
+    if(!result || !result.ok){
+      alert('حصل خطأ أثناء النشر: ' + ((result && result.error) || 'خطأ غير معروف') + ' — اعمل تحديث للصفحة وشوف اللي اتنشر فعلاً قبل ما تحاول تاني.');
+      btnEl.disabled = false; btnEl.textContent = "نشر التعديلات";
+      if(discardEl) discardEl.disabled = false;
+      return;
+    }
+  }
+  pendingMeetingOps = [];
+  await loadMeetingsData();
+  renderMeetingsAdmin(true);
+}
+function discardMeetingChanges(){
+  if(pendingMeetingOps.length === 0) return;
+  if(!confirm('متأكد عايز تلغي كل المواعيد اللي لسه ماتنشرتش؟')) return;
+  pendingMeetingOps = [];
+  renderMeetingsAdmin(true);
+}
 
+async function renderMeetingsAdmin(skipLoad){
+  const inner = document.getElementById('adminInner');
+  if(!skipLoad){
+    inner.innerHTML = `<div class="load-msg">جاري تحميل المواعيد...</div>`;
+    const ok = await loadMeetingsData();
+    if(!ok){ inner.innerHTML = `<div class="admin-empty">حصل خطأ في تحميل المواعيد.</div>`; return; }
+  }
+
+  const draft = computeDraftMeetings();
   const grouped = {};
-  slots.forEach(s => {
+  draft.forEach(s => {
     const d = new Date(s.start_time);
     const key = d.toISOString().split('T')[0];
     if(!grouped[key]) grouped[key] = [];
     grouped[key].push(s);
   });
   const sortedDates = Object.keys(grouped).sort();
+  const hasPending = pendingMeetingOps.length > 0;
 
-  inner.innerHTML = `
+  const publishBar = `
+    <div class="qs-section" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+      <div style="font-family:'Cairo';font-size:13px;font-weight:700;color:${hasPending ? 'var(--gold)' : 'var(--ink-dim)'};">
+        ${hasPending ? `⚠️ عندك ${pendingMeetingOps.length} تعديل لسه مش ظاهر للعميل — لحد ما تدوس "نشر"` : '✓ كل المواعيد منشورة وظاهرة للعميل'}
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn small" id="discardMeetingsBtn" ${hasPending?'':'disabled'}>تراجع عن التعديلات</button>
+        <button class="btn primary small" id="publishMeetingsBtn" ${hasPending?'':'disabled'}>نشر${hasPending ? ` (${pendingMeetingOps.length})` : ''}</button>
+      </div>
+    </div>
+  `;
+
+  inner.innerHTML = publishBar + `
     <div class="qs-section">
       <h3 style="font-family:'Cairo';font-size:15px;color:var(--green-900);margin-bottom:14px;">إضافة معاد جديد</h3>
       <div class="row">
@@ -227,7 +308,7 @@ async function renderMeetingsAdmin(){
       <div class="row" style="margin-top:10px;">
         <input type="text" id="newSlotLink" placeholder="رابط الميتينج (اختياري — ممكن تحطه بعدين)">
       </div>
-      <button class="btn primary small" id="addSlotBtn" style="margin-top:10px;">إضافة المعاد</button>
+      <button class="btn primary small" id="addSlotBtn" style="margin-top:10px;">ضيف المعاد محليًا</button>
     </div>
     ${sortedDates.length === 0 ? `<div class="admin-empty">مفيش مواعيد متضافة لسه.</div>` : sortedDates.map(dateKey => {
       const d = new Date(dateKey);
@@ -242,9 +323,9 @@ async function renderMeetingsAdmin(){
               : startTxt;
             const booked = s.booking;
             return `
-              <div class="q-row" data-id="${s.id}">
+              <div class="q-row" data-id="${s.id}" style="${s._pending ? 'border:1px dashed var(--gold);border-radius:8px;' : ''}">
                 <div class="q-row-text">
-                  <div class="qlabel">${timeLabel} ${booked ? `<span class="status-pill st-approved">محجوز</span>` : `<span class="status-pill st-pending">متاح</span>`}</div>
+                  <div class="qlabel">${timeLabel} ${s._pending ? `<span class="status-pill st-pending">لسه مش منشور</span>` : (booked ? `<span class="status-pill st-approved">محجوز</span>` : `<span class="status-pill st-pending">متاح</span>`)}</div>
                   <div class="qmeta">${s.link ? s.link : '<em>من غير رابط ميتينج — حط الرابط بعدين لو حبيت</em>'}${booked ? ` · حجزه: ${booked.client.name || 'بدون اسم'} (${booked.client.phone||'—'})` : ''}</div>
                 </div>
                 <div class="q-row-actions">
@@ -257,6 +338,11 @@ async function renderMeetingsAdmin(){
       `;
     }).join('')}
   `;
+
+  const publishBtn = document.getElementById('publishMeetingsBtn');
+  if(publishBtn) publishBtn.addEventListener('click', publishMeetingChanges);
+  const discardBtn = document.getElementById('discardMeetingsBtn');
+  if(discardBtn) discardBtn.addEventListener('click', discardMeetingChanges);
 
   let selectedStartHour12 = null; // 1..12
   let selectedStartAmPm = 'AM';
@@ -307,7 +393,7 @@ async function renderMeetingsAdmin(){
     el.textContent = txt;
   }
 
-  document.getElementById('addSlotBtn').addEventListener('click', async (e) => {
+  document.getElementById('addSlotBtn').addEventListener('click', (e) => {
     const dateVal = document.getElementById('newSlotDate').value; // YYYY-MM-DD
     const link = document.getElementById('newSlotLink').value.trim();
     if(!dateVal || selectedStartHour12 === null){ alert('اختار التاريخ وساعة البداية'); return; }
@@ -324,23 +410,19 @@ async function renderMeetingsAdmin(){
       endDateTimeStr = `${dateVal}T${String(endHour24).padStart(2,'0')}:00:00`;
     }
 
-    const btnEl = e.target;
-    btnEl.disabled = true; btnEl.textContent = "جاري الإضافة...";
-    const result = await adminFetch('/api/meetings', {
-      action: 'add',
-      startTime: new Date(startDateTimeStr).toISOString(),
-      endTime: endDateTimeStr ? new Date(endDateTimeStr).toISOString() : null,
-      link: link || null
-    });
-    btnEl.disabled = false; btnEl.textContent = "إضافة المعاد";
-    if(result && result.ok){ renderMeetingsAdmin(); }
-    else{ alert('حصل خطأ: ' + ((result && result.error) || 'خطأ غير معروف')); }
+    queueMeetingAdd(
+      new Date(startDateTimeStr).toISOString(),
+      endDateTimeStr ? new Date(endDateTimeStr).toISOString() : null,
+      link || null
+    );
+    renderMeetingsAdmin(true);
   });
   inner.querySelectorAll('.delSlotBtn').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
-      if(!confirm('متأكد إنك عايز تمسح المعاد ده؟')) return;
-      await adminFetch('/api/meetings', { action: 'delete', id: e.target.dataset.id });
-      renderMeetingsAdmin();
+    btn.addEventListener('click', (e) => {
+      const id = e.target.dataset.id;
+      if(!isTempMeetingId(id) && !confirm('متأكد إنك عايز تمسح المعاد ده؟ (هيتشال فعليًا لما تدوس نشر)')) return;
+      queueMeetingDelete(id);
+      renderMeetingsAdmin(true);
     });
   });
 }
