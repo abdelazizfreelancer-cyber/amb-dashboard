@@ -17,41 +17,6 @@ create table if not exists questions (
   created_at timestamptz default now()
 );
 
--- أقسام الأسئلة بقت قابلة للإضافة/الحذف من الداش بورد بدل ما تكون ثابتة في الكود
-create table if not exists question_sections (
-  id uuid primary key default gen_random_uuid(),
-  section_key text not null unique,
-  part text,
-  num text,
-  title text not null,
-  description text,
-  is_commercial boolean not null default false,
-  sort_order int not null default 0,
-  created_at timestamptz not null default now()
-);
-alter table question_sections enable row level security;
-drop policy if exists "public can read question sections" on question_sections;
-create policy "public can read question sections"
-  on question_sections for select
-  using (true);
-
--- بذر الأقسام الأصلية أول مرة بس (لو الجدول لسه فاضي، عشان مايكررش لو شغلت الكود تاني)
-insert into question_sections (section_key, part, num, title, description, is_commercial, sort_order)
-select * from (values
-  ('s1','PART 01 — DISCOVERY','01','نبذة عن البراند','الأساسيات اللي بنبني عليها كل حاجة تانية',false,1),
-  ('s2','PART 01 — DISCOVERY','02','الوضع التشغيلي الحالي','إزاي البيزنس شغال دلوقتي على أرض الواقع',false,2),
-  ('s3','PART 01 — DISCOVERY','03','المنتجات والتسعير','عشان نحدد إعلانات هتدفع على إيه بالظبط',false,3),
-  ('s4','PART 01 — DISCOVERY','04','الجمهور المستهدف','مين بالظبط اللي بيشتري (أو المفروض يشتري)',false,4),
-  ('s5','PART 01 — DISCOVERY','05','المنافسين والسوق','عشان نعرف نموضعكم صح جنبهم',false,5),
-  ('s6','PART 01 — DISCOVERY','06','التجربة التسويقية السابقة','عشان نبني على اللي اتعمل، مش نبدأ من صفر',false,6),
-  ('s7','PART 02 — GOALS & SETUP','07','الأهداف من التعاون','عشان نقيس النجاح صح من الأول',false,7),
-  ('s8','PART 02 — GOALS & SETUP','08','الميزانية','رقم الإعلانات الفعلي، منفصل عن أتعاب الشغل',false,8),
-  ('s9','PART 02 — GOALS & SETUP','09','المحل كجزء من الخطة','بما إن عندكم محل قائم، هنستغله صح في الحملات',false,9),
-  ('s10','PART 02 — GOALS & SETUP','10','الأنظمة والدفع الإلكتروني','التفاصيل التقنية اللي هتوفر وقت بعد كده',false,10),
-  ('commercial','PART 03 — COMMERCIALS','—','نتحاسب إزاي؟','هنراجعها مع بعض ونختار الأنسب لحجم شغلك',true,11)
-) as v(section_key,part,num,title,description,is_commercial,sort_order)
-where not exists (select 1 from question_sections limit 1);
-
 create table if not exists responses (
   id uuid primary key default gen_random_uuid(),
   ref text unique not null,
