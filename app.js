@@ -4,22 +4,8 @@ const supabaseClient = window.supabase.createClient(
   window.APP_CONFIG.SUPABASE_ANON_KEY
 );
 
-/* ===================== STATIC CONFIG (لازم يفضل مطابق لموقع العميل) ===================== */
-const SECTIONS_META = [
-  {key:"s1", part:"PART 01 — DISCOVERY", num:"01", title:"نبذة عن البراند", desc:"الأساسيات اللي بنبني عليها كل حاجة تانية"},
-  {key:"s2", part:"PART 01 — DISCOVERY", num:"02", title:"الوضع التشغيلي الحالي", desc:"إزاي البيزنس شغال دلوقتي على أرض الواقع"},
-  {key:"s3", part:"PART 01 — DISCOVERY", num:"03", title:"المنتجات والتسعير", desc:"عشان نحدد إعلانات هتدفع على إيه بالظبط"},
-  {key:"s4", part:"PART 01 — DISCOVERY", num:"04", title:"الجمهور المستهدف", desc:"مين بالظبط اللي بيشتري (أو المفروض يشتري)"},
-  {key:"s5", part:"PART 01 — DISCOVERY", num:"05", title:"المنافسين والسوق", desc:"عشان نعرف نموضعكم صح جنبهم"},
-  {key:"s6", part:"PART 01 — DISCOVERY", num:"06", title:"التجربة التسويقية السابقة", desc:"عشان نبني على اللي اتعمل، مش نبدأ من صفر"},
-  {key:"s7", part:"PART 02 — GOALS & SETUP", num:"07", title:"الأهداف من التعاون", desc:"عشان نقيس النجاح صح من الأول"},
-  {key:"s8", part:"PART 02 — GOALS & SETUP", num:"08", title:"الميزانية", desc:"رقم الإعلانات الفعلي، منفصل عن أتعاب الشغل"},
-  {key:"s9", part:"PART 02 — GOALS & SETUP", num:"09", title:"المحل كجزء من الخطة", desc:"بما إن عندكم محل قائم، هنستغله صح في الحملات"},
-  {key:"s10", part:"PART 02 — GOALS & SETUP", num:"10", title:"الأنظمة والدفع الإلكتروني", desc:"التفاصيل التقنية اللي هتوفر وقت بعد كده"},
-  {key:"commercial", part:"PART 03 — COMMERCIALS", num:"—", title:"نتحاسب إزاي؟", desc:"هنراجعها مع بعض ونختار الأنسب لحجم شغلك", isCommercial:true}
-];
-
 /* ===================== STATE ===================== */
+let sections = []; // أقسام الأسئلة — بتتحمّل من قاعدة البيانات (قابلة للإضافة/الحذف من هنا)
 let questions = [];
 let commercialOptions = [];
 let adminAuthed = false;
@@ -51,6 +37,16 @@ async function loadQuestions(){
   questions = (data || []).map(q => ({
     id: q.id, sectionKey: q.section_key, label: q.label, type: q.type,
     multi: q.multi, options: q.options, required: q.required
+  }));
+}
+async function loadSections(){
+  const { data, error } = await supabaseClient
+    .from('question_sections')
+    .select('section_key, part, num, title, description, is_commercial, sort_order')
+    .order('sort_order', { ascending: true });
+  if(error){ console.error('load sections error', error); sections = []; return; }
+  sections = (data || []).map(s => ({
+    key: s.section_key, part: s.part, num: s.num, title: s.title, desc: s.description, isCommercial: s.is_commercial
   }));
 }
 async function loadCommercialOptions(){
@@ -98,20 +94,21 @@ function renderAdminGate(){
 
 async function renderAdminRoot(){
   if(!adminAuthed){ renderAdminGate(); return; }
+  await loadSections();
   await loadQuestions();
   await loadCommercialOptions();
   const container = document.getElementById('adminView');
 
   const tabs = [
-    { key:'questions', label:'الأسئلة' },
-    { key:'responses', label:'الردود المستلمة' },
-    { key:'requests', label:'طلبات بريف جديد' },
-    { key:'commercial', label:'خيارات التحاسب' },
-    { key:'clients', label:'بيانات العملاء' },
-    { key:'meetings', label:'المواعيد' },
-    { key:'contracts', label:'العقود' },
-    { key:'theme', label:'شكل الموقع' },
-    { key:'admins', label:'الحسابات' }
+    { key:'questions', label:'الأسئلة', icon:'📝' },
+    { key:'responses', label:'الردود المستلمة', icon:'📬' },
+    { key:'requests', label:'طلبات بريف جديد', icon:'📋' },
+    { key:'commercial', label:'خيارات التحاسب', icon:'💰' },
+    { key:'clients', label:'بيانات العملاء', icon:'👥' },
+    { key:'meetings', label:'المواعيد', icon:'📅' },
+    { key:'contracts', label:'العقود', icon:'📄' },
+    { key:'theme', label:'شكل الموقع', icon:'🎨' },
+    { key:'admins', label:'الحسابات', icon:'⚙️' }
   ].filter(t => hasPerm(t.key));
 
   if(tabs.length === 0){
@@ -119,20 +116,41 @@ async function renderAdminRoot(){
     return;
   }
   if(!tabs.some(t => t.key === adminSubTab)) adminSubTab = tabs[0].key;
+  const currentTab = tabs.find(t => t.key === adminSubTab);
 
   container.innerHTML = `
-    <div class="admin-toolbar">
-      <div class="subtabs">
-        ${tabs.map(t => `<button class="subtab-btn ${adminSubTab===t.key?'active':''}" data-tab="${t.key}">${t.label}</button>`).join('')}
-      </div>
-      <div style="display:flex;align-items:center;gap:12px;">
-        ${adminName ? `<span style="font-size:12px;color:var(--ink-dim);font-family:'Cairo';">مسجل دخول: ${adminName}</span>` : ``}
-        <button class="mini-link" id="logoutBtn">تسجيل خروج</button>
-      </div>
+    <div class="admin-shell">
+      <aside class="admin-sidebar">
+        <div class="admin-brand">
+          <div class="admin-brand-title">Abdelaziz</div>
+          <div class="admin-brand-sub">Media Buyer — لوحة التحكم</div>
+        </div>
+        <nav class="admin-nav">
+          ${tabs.map(t => `
+            <button class="admin-nav-btn ${adminSubTab===t.key?'active':''}" data-tab="${t.key}">
+              <span class="admin-nav-icon">${t.icon}</span>
+              <span>${t.label}</span>
+            </button>
+          `).join('')}
+        </nav>
+        <button class="admin-nav-btn admin-logout-btn" id="logoutBtn">
+          <span class="admin-nav-icon">🚪</span>
+          <span>تسجيل خروج</span>
+        </button>
+      </aside>
+      <main class="admin-main">
+        <div class="admin-topbar">
+          <h2 class="admin-page-title">${currentTab.label}</h2>
+          <div class="admin-user-chip">
+            ${adminName ? `<span class="admin-user-name">${adminName}</span>` : `<span class="admin-user-name">الأدمن</span>`}
+            <span class="admin-user-avatar">${(adminName||'A').trim().charAt(0).toUpperCase()}</span>
+          </div>
+        </div>
+        <div id="adminInner"></div>
+      </main>
     </div>
-    <div id="adminInner"></div>
   `;
-  container.querySelectorAll('.subtab-btn').forEach(btn => {
+  container.querySelectorAll('.admin-nav-btn[data-tab]').forEach(btn => {
     btn.addEventListener('click', () => { adminSubTab = btn.dataset.tab; renderAdminRoot(); });
   });
   document.getElementById('logoutBtn').addEventListener('click', () => { adminAuthed=false; adminPassword=null; adminName=''; adminPermissions=[]; renderAdminGate(); });
@@ -323,10 +341,10 @@ async function renderMeetingsAdmin(skipLoad){
               : startTxt;
             const booked = s.booking;
             return `
-              <div class="q-row" data-id="${s.id}" style="${s._pending ? 'border:1px dashed var(--gold);border-radius:8px;' : ''}">
+              <div class="q-row ${booked && !s._pending ? 'meetingBookedRow' : ''}" data-id="${s.id}" style="${s._pending ? 'border:1px dashed var(--gold);border-radius:8px;' : ''}${booked && !s._pending ? 'cursor:pointer;' : ''}">
                 <div class="q-row-text">
                   <div class="qlabel">${timeLabel} ${s._pending ? `<span class="status-pill st-pending">لسه مش منشور</span>` : (booked ? `<span class="status-pill st-approved">محجوز</span>` : `<span class="status-pill st-pending">متاح</span>`)}</div>
-                  <div class="qmeta">${s.link ? s.link : '<em>من غير رابط ميتينج — حط الرابط بعدين لو حبيت</em>'}${booked ? ` · حجزه: ${booked.client.name || 'بدون اسم'} (${booked.client.phone||'—'})` : ''}</div>
+                  <div class="qmeta">${s.link ? s.link : '<em>من غير رابط ميتينج — حط الرابط بعدين لو حبيت</em>'}${booked ? ` · حجزه: ${booked.client.name || 'بدون اسم'} (${booked.client.phone||'—'}) — دوس هنا لتفاصيل أكتر` : ''}</div>
                 </div>
                 <div class="q-row-actions">
                   <button class="del-btn delSlotBtn" data-id="${s.id}" title="مسح المعاد">✕</button>
@@ -419,12 +437,72 @@ async function renderMeetingsAdmin(skipLoad){
   });
   inner.querySelectorAll('.delSlotBtn').forEach(btn => {
     btn.addEventListener('click', (e) => {
+      e.stopPropagation();
       const id = e.target.dataset.id;
       if(!isTempMeetingId(id) && !confirm('متأكد إنك عايز تمسح المعاد ده؟ (هيتشال فعليًا لما تدوس نشر)')) return;
       queueMeetingDelete(id);
       renderMeetingsAdmin(true);
     });
   });
+  inner.querySelectorAll('.meetingBookedRow').forEach(row => {
+    row.addEventListener('click', () => {
+      const id = row.dataset.id;
+      const slot = computeDraftMeetings().find(s => s.id === id);
+      if(slot) showMeetingBookingDetail(slot);
+    });
+  });
+}
+
+async function showMeetingBookingDetail(slot){
+  const inner = document.getElementById('adminInner');
+  inner.innerHTML = `<div class="load-msg">جاري تحميل بيانات العميل...</div>`;
+  const booked = slot.booking;
+  const c = booked.client || {};
+  const d = new Date(slot.start_time);
+  const dayName = WEEKDAY_NAMES[d.getDay()];
+  const startTxt = d.toLocaleTimeString('ar-EG', { hour:'2-digit', minute:'2-digit' });
+  const timeLabel = slot.end_time
+    ? `${startTxt} – ${new Date(slot.end_time).toLocaleTimeString('ar-EG', { hour:'2-digit', minute:'2-digit' })}`
+    : startTxt;
+
+  // نجيب البريف بتاعه لو بعت واحد
+  let matchingResponse = null;
+  try{
+    const res = await fetch('/api/responses', { headers: { 'x-admin-password': adminPassword } });
+    if(res.status === 401){ adminAuthed=false; adminPassword=null; renderAdminGate(); return; }
+    const json = await res.json();
+    matchingResponse = (json.responses || []).find(r => r.user_id === booked.user_id) || null;
+  }catch(err){ /* هنكمل من غير بريف لو حصل خطأ في التحميل */ }
+
+  inner.innerHTML = `
+    <button class="preview-back" id="backToMeetings" style="margin-bottom:14px;">→ رجوع لكل المواعيد</button>
+    <div class="qs-section">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:18px;">
+        ${c.avatar ? `<img src="${c.avatar}" style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid var(--gold);flex-shrink:0;">` : `<div class="admin-user-avatar" style="width:56px;height:56px;font-size:20px;">${(c.name||'؟').trim().charAt(0).toUpperCase()}</div>`}
+        <div>
+          <h2 style="margin:0 0 6px;font-family:'Cairo';color:var(--green-900);">${c.name || 'بدون اسم'}</h2>
+          <div style="font-size:13px;color:var(--ink-dim);">📞 ${c.phone || '—'} · ✉️ ${c.email || '—'}</div>
+        </div>
+      </div>
+      <div class="qs-section" style="background:var(--page-bg);">
+        <div style="font-family:'Cairo';font-weight:700;color:var(--green-900);margin-bottom:8px;">تفاصيل المعاد</div>
+        <div style="font-size:14px;">📅 ${dayName} — ${d.toLocaleDateString('ar-EG')}</div>
+        <div style="font-size:14px;margin-top:6px;">🕐 ${timeLabel}</div>
+        ${slot.link ? `<div style="font-size:14px;margin-top:6px;">🔗 ${slot.link}</div>` : ''}
+      </div>
+      ${matchingResponse
+        ? `<button class="btn primary small" id="openBriefBtn" style="margin-top:14px;">شوف البريف بتاعه كامل</button>`
+        : `<p style="font-size:13px;color:var(--ink-dim);margin-top:14px;">لسه مبعتش بريف.</p>`
+      }
+    </div>
+  `;
+  document.getElementById('backToMeetings').addEventListener('click', () => renderMeetingsAdmin());
+  const openBriefBtn = document.getElementById('openBriefBtn');
+  if(openBriefBtn){
+    openBriefBtn.addEventListener('click', () => {
+      renderResponsePreview(matchingResponse, '→ رجوع لبيانات المعاد', () => showMeetingBookingDetail(slot));
+    });
+  }
 }
 
 const THEME_FONTS = ['Cairo', 'Almarai', 'Tajawal', 'Changa', 'IBM Plex Sans Arabic', 'El Messiri', 'Reem Kufi'];
@@ -782,14 +860,27 @@ function renderQuestionEditor(){
       </div>
     </div>
   `;
-  inner.innerHTML = publishBar + SECTIONS_META.map(meta => {
+  inner.innerHTML = publishBar + `
+    <div class="qs-section">
+      <h3 style="font-family:'Cairo';font-size:15px;color:var(--green-900);margin-bottom:10px;">إضافة قسم جديد</h3>
+      <p style="font-size:12px;color:var(--ink-dim);margin-bottom:10px;">القسم بيتضاف/يتمسح فورًا (مش جزء من نظام النشر بتاع الأسئلة).</p>
+      <div class="row">
+        <input type="text" id="newSectionTitle" placeholder="اسم القسم (مثال: تفاصيل الشحن)">
+      </div>
+      <input type="text" id="newSectionDesc" placeholder="وصف مختصر للقسم (اختياري)" style="margin-bottom:10px;">
+      <button class="btn primary small" id="addSectionBtn">ضيف القسم</button>
+    </div>
+  ` + sections.map(meta => {
     const qs = draft.filter(q => q.sectionKey === meta.key);
     const isOpen = keepFormOpenFor === meta.key;
     return `
       <div class="qs-section" data-section="${meta.key}">
-        <div class="qs-section-head">
-          <div class="badge-num">${meta.num}</div>
-          <h3>${meta.title}</h3>
+        <div class="qs-section-head" style="justify-content:space-between;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div class="badge-num">${meta.num}</div>
+            <h3>${meta.title}</h3>
+          </div>
+          ${meta.isCommercial ? '' : `<button class="del-btn delSectionBtn" data-section-key="${meta.key}" title="امسح القسم بكل أسئلته">✕ امسح القسم</button>`}
         </div>
         ${qs.length === 0 ? '<p style="font-size:12px;color:var(--ink-dim);">مفيش أسئلة في القسم ده دلوقتي.</p>' : qs.map(q => {
           if(editingQid === q.id){
@@ -860,6 +951,41 @@ function renderQuestionEditor(){
   if(publishBtn) publishBtn.addEventListener('click', publishQuestionChanges);
   const discardBtn = document.getElementById('discardQuestionsBtn');
   if(discardBtn) discardBtn.addEventListener('click', discardQuestionChanges);
+
+  document.getElementById('addSectionBtn').addEventListener('click', async (e) => {
+    const title = document.getElementById('newSectionTitle').value.trim();
+    const description = document.getElementById('newSectionDesc').value.trim();
+    if(!title){ alert('اكتب اسم القسم'); return; }
+    const btnEl = e.target;
+    btnEl.disabled = true; btnEl.textContent = "جاري الإضافة...";
+    const result = await adminFetch('/api/sections', { action:'add', title, description: description || null });
+    btnEl.disabled = false; btnEl.textContent = "ضيف القسم";
+    if(result && result.ok){ await loadSections(); renderQuestionEditor(); }
+    else{ alert('حصل خطأ: ' + ((result && result.error) || 'خطأ غير معروف')); }
+  });
+  inner.querySelectorAll('.delSectionBtn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const sectionKey = e.target.dataset.sectionKey;
+      const qCount = questions.filter(q => q.sectionKey === sectionKey).length;
+      const warnMsg = qCount > 0
+        ? `القسم ده فيه ${qCount} سؤال — لو مسحته هيتمسحوا هما كمان نهائيًا. متأكد؟`
+        : 'متأكد إنك عايز تمسح القسم ده؟';
+      if(!confirm(warnMsg)) return;
+      const btnEl = e.target;
+      btnEl.disabled = true; btnEl.textContent = "جاري المسح...";
+      const result = await adminFetch('/api/sections', { action:'delete', sectionKey });
+      if(result && result.ok){
+        pendingQuestionOps = pendingQuestionOps.filter(op => {
+          const opSection = op.action === 'add' ? op.section : (questions.find(q=>q.id===op.id)||{}).sectionKey;
+          return opSection !== sectionKey;
+        });
+        await loadSections(); await loadQuestions(); renderQuestionEditor();
+      } else {
+        btnEl.disabled = false; btnEl.textContent = "✕ امسح القسم";
+        alert('حصل خطأ: ' + ((result && result.error) || 'خطأ غير معروف'));
+      }
+    });
+  });
 
   inner.querySelectorAll('.req-check').forEach(cb => {
     cb.addEventListener('change', (e) => {
@@ -1267,13 +1393,13 @@ async function renderResponsesList(){
   });
 }
 
-function renderResponsePreview(rec){
+function renderResponsePreview(rec, backLabel, backFn){
   const inner = document.getElementById('adminInner');
   const a = rec.answers;
   const c = rec.client || {};
   const dateStr = new Date(rec.submitted_at).toLocaleString('ar-EG');
 
-  const sectionsHtml = SECTIONS_META.map(meta => {
+  const sectionsHtml = sections.map(meta => {
     const qs = questions.filter(q => q.sectionKey === meta.key);
     if(qs.length === 0) return '';
     return `
@@ -1302,7 +1428,7 @@ function renderResponsePreview(rec){
 
   inner.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
-      <button class="preview-back" id="backToList" style="margin-bottom:0;">→ رجوع لكل الردود</button>
+      <button class="preview-back" id="backToList" style="margin-bottom:0;">${backLabel || '→ رجوع لكل الردود'}</button>
       <button class="btn primary small" id="printBriefBtn">طباعة / تحميل PDF</button>
     </div>
     <div id="printableBrief">
@@ -1322,7 +1448,7 @@ function renderResponsePreview(rec){
       ${sectionsHtml}
     </div>
   `;
-  document.getElementById('backToList').addEventListener('click', renderResponsesList);
+  document.getElementById('backToList').addEventListener('click', backFn || renderResponsesList);
   document.getElementById('printBriefBtn').addEventListener('click', () => window.print());
 }
 
