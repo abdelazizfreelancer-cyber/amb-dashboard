@@ -605,10 +605,103 @@ function typeToSelectValue(q){
   return q.type;
 }
 
+let pendingQuestionOps = []; // التعديلات اللي لسه ماتنشرتش (add/update/delete) — بتتبعت لـ Supabase دفعة واحدة لما تدوس "نشر"
+let questionTempIdCounter = 0;
+
+// بيرجع نسخة "مسودة" من الأسئلة بعد تطبيق كل التعديلات المعلّقة (لسه ماتنشرتش) فوق آخر نسخة منشورة فعليًا
+function computeDraftQuestions(){
+  let draft = questions.map(q => ({ ...q }));
+  pendingQuestionOps.forEach(op => {
+    if(op.action === 'delete'){
+      draft = draft.filter(q => q.id !== op.id);
+    } else if(op.action === 'update'){
+      const idx = draft.findIndex(q => q.id === op.id);
+      if(idx !== -1) draft[idx] = { ...draft[idx], ...op.fields, _pending:true };
+    } else if(op.action === 'add'){
+      draft.push({ id: op.tempId, sectionKey: op.section, label: op.label, type: op.type, multi: op.multi, options: op.options, required: op.required, _pending:true });
+    }
+  });
+  return draft;
+}
+function isTempQid(id){ return typeof id === 'string' && id.startsWith('temp-'); }
+
+function queueQuestionUpdate(id, fields){
+  if(isTempQid(id)){
+    const addOp = pendingQuestionOps.find(op => op.action === 'add' && op.tempId === id);
+    if(addOp) Object.assign(addOp, fields);
+    return;
+  }
+  const existing = pendingQuestionOps.find(op => op.action === 'update' && op.id === id);
+  if(existing){ existing.fields = { ...existing.fields, ...fields }; }
+  else{ pendingQuestionOps.push({ action:'update', id, fields }); }
+}
+function queueQuestionDelete(id){
+  if(isTempQid(id)){
+    pendingQuestionOps = pendingQuestionOps.filter(op => !(op.action === 'add' && op.tempId === id));
+    return;
+  }
+  pendingQuestionOps = pendingQuestionOps.filter(op => !(op.action === 'update' && op.id === id));
+  if(!pendingQuestionOps.some(op => op.action === 'delete' && op.id === id)){
+    pendingQuestionOps.push({ action:'delete', id });
+  }
+}
+function queueQuestionAdd(section, label, type, multi, options, required){
+  const tempId = `temp-${++questionTempIdCounter}`;
+  pendingQuestionOps.push({ action:'add', tempId, section, label, type, multi, options, required });
+  return tempId;
+}
+
+async function publishQuestionChanges(){
+  if(pendingQuestionOps.length === 0) return;
+  const btnEl = document.getElementById('publishQuestionsBtn');
+  const discardEl = document.getElementById('discardQuestionsBtn');
+  btnEl.disabled = true; btnEl.textContent = "جاري النشر...";
+  if(discardEl) discardEl.disabled = true;
+  for(const op of pendingQuestionOps){
+    let result;
+    if(op.action === 'add'){
+      result = await adminFetch('/api/questions', { action:'add', sectionKey: op.section, label: op.label, type: op.type, multi: op.multi, options: op.options, required: op.required });
+    } else if(op.action === 'update'){
+      result = await adminFetch('/api/questions', { action:'update', id: op.id, ...op.fields });
+    } else if(op.action === 'delete'){
+      result = await adminFetch('/api/questions', { action:'delete', id: op.id });
+    }
+    if(!result || !result.ok){
+      alert('حصل خطأ أثناء النشر: ' + ((result && result.error) || 'خطأ غير معروف') + ' — اعمل تحديث للصفحة وشوف اللي اتنشر فعلاً قبل ما تحاول تاني.');
+      btnEl.disabled = false; btnEl.textContent = "نشر التعديلات";
+      if(discardEl) discardEl.disabled = false;
+      return;
+    }
+  }
+  pendingQuestionOps = [];
+  await loadQuestions();
+  renderQuestionEditor();
+}
+function discardQuestionChanges(){
+  if(pendingQuestionOps.length === 0) return;
+  if(!confirm('متأكد عايز تلغي كل التعديلات اللي لسه ماتنشرتش؟')) return;
+  pendingQuestionOps = [];
+  editingQid = null;
+  renderQuestionEditor();
+}
+
 function renderQuestionEditor(){
   const inner = document.getElementById('adminInner');
-  inner.innerHTML = SECTIONS_META.map(meta => {
-    const qs = questions.filter(q => q.sectionKey === meta.key);
+  const draft = computeDraftQuestions();
+  const hasPending = pendingQuestionOps.length > 0;
+  const publishBar = `
+    <div class="qs-section" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+      <div style="font-family:'Cairo';font-size:13px;font-weight:700;color:${hasPending ? 'var(--gold)' : 'var(--ink-dim)'};">
+        ${hasPending ? `⚠️ عندك ${pendingQuestionOps.length} تعديل لسه مش ظاهر للعميل — لحد ما تدوس "نشر"` : '✓ كل حاجة منشورة وظاهرة للعميل'}
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn small" id="discardQuestionsBtn" ${hasPending?'':'disabled'}>تراجع عن التعديلات</button>
+        <button class="btn primary small" id="publishQuestionsBtn" ${hasPending?'':'disabled'}>نشر${hasPending ? ` (${pendingQuestionOps.length})` : ''}</button>
+      </div>
+    </div>
+  `;
+  inner.innerHTML = publishBar + SECTIONS_META.map(meta => {
+    const qs = draft.filter(q => q.sectionKey === meta.key);
     const isOpen = keepFormOpenFor === meta.key;
     return `
       <div class="qs-section" data-section="${meta.key}">
@@ -636,16 +729,16 @@ function renderQuestionEditor(){
                   <label class="req-toggle"><input type="checkbox" class="editQRequired" ${q.required?'checked':''}> إجباري</label>
                   <div style="display:flex;gap:8px;">
                     <button class="btn small cancelEditBtn">إلغاء</button>
-                    <button class="btn primary small saveEditBtn" data-qid="${q.id}">حفظ التعديل</button>
+                    <button class="btn primary small saveEditBtn" data-qid="${q.id}">حفظ التعديل محليًا</button>
                   </div>
                 </div>
               </div>
             `;
           }
           return `
-          <div class="q-row" data-qid="${q.id}">
+          <div class="q-row" data-qid="${q.id}" style="${q._pending ? 'border:1px dashed var(--gold);border-radius:8px;' : ''}">
             <div class="q-row-text">
-              <div class="qlabel">${q.label}</div>
+              <div class="qlabel">${q.label} ${q._pending ? `<span class="status-pill st-pending">لسه مش منشور</span>` : ''}</div>
               <div class="qmeta">${typeLabel(q)}</div>
             </div>
             <div class="q-row-actions">
@@ -658,7 +751,7 @@ function renderQuestionEditor(){
         }).join('')}
         <button class="add-q-toggle" data-section="${meta.key}">+ ضيف سؤال في القسم ده</button>
         <div class="add-q-form ${isOpen?'open':''}" data-section-form="${meta.key}">
-          ${isOpen ? `<div class="qadd-success">✓ اتضاف السؤال. تقدر تضيف واحد تاني على طول.</div>` : ``}
+          ${isOpen ? `<div class="qadd-success">✓ اتضاف محليًا. متنساش تدوس "نشر" فوق عشان يظهر للعميل. تقدر تضيف واحد تاني على طول.</div>` : ``}
           <div class="row">
             <input type="text" class="newQLabel" placeholder="نص السؤال">
             <select class="newQType">
@@ -673,7 +766,7 @@ function renderQuestionEditor(){
           <input type="text" class="newQOptions" placeholder="الاختيارات مفصولة بفاصلة (لو النوع اختيارات) — مثال: أيوه، لأ، مش متأكد" style="margin-bottom:10px;">
           <div class="row" style="align-items:center;">
             <label class="req-toggle"><input type="checkbox" class="newQRequired"> إجباري</label>
-            <button class="btn primary small saveQBtn" data-section="${meta.key}">حفظ السؤال</button>
+            <button class="btn primary small saveQBtn" data-section="${meta.key}">ضيف السؤال محليًا</button>
           </div>
         </div>
       </div>
@@ -681,21 +774,24 @@ function renderQuestionEditor(){
   }).join('');
   keepFormOpenFor = null;
 
+  const publishBtn = document.getElementById('publishQuestionsBtn');
+  if(publishBtn) publishBtn.addEventListener('click', publishQuestionChanges);
+  const discardBtn = document.getElementById('discardQuestionsBtn');
+  if(discardBtn) discardBtn.addEventListener('click', discardQuestionChanges);
+
   inner.querySelectorAll('.req-check').forEach(cb => {
-    cb.addEventListener('change', async (e) => {
+    cb.addEventListener('change', (e) => {
       const qid = e.target.closest('.q-row').dataset.qid;
-      const q = questions.find(x => x.id === qid);
-      if(!q) return;
-      q.required = e.target.checked;
-      await adminFetch('/api/questions', { action: 'update', id: qid, required: q.required });
+      queueQuestionUpdate(qid, { required: e.target.checked });
+      renderQuestionEditor();
     });
   });
   inner.querySelectorAll('.del-btn').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
+    btn.addEventListener('click', (e) => {
       const qid = e.target.closest('.q-row').dataset.qid;
-      if(!confirm('متأكد إنك عايز تمسح السؤال ده؟')) return;
-      await adminFetch('/api/questions', { action: 'delete', id: qid });
-      await loadQuestions(); renderQuestionEditor();
+      if(!isTempQid(qid) && !confirm('متأكد إنك عايز تمسح السؤال ده؟ (هيتشال فعليًا لما تدوس نشر)')) return;
+      queueQuestionDelete(qid);
+      renderQuestionEditor();
     });
   });
   inner.querySelectorAll('.edit-btn').forEach(btn => {
@@ -708,7 +804,7 @@ function renderQuestionEditor(){
     btn.addEventListener('click', () => { editingQid = null; renderQuestionEditor(); });
   });
   inner.querySelectorAll('.saveEditBtn').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
+    btn.addEventListener('click', (e) => {
       const qid = e.target.dataset.qid;
       const wrap = e.target.closest('.q-row-editing');
       const label = wrap.querySelector('.editQLabel').value.trim();
@@ -722,17 +818,9 @@ function renderQuestionEditor(){
         options = optsRaw.split('،').join(',').split(',').map(s=>s.trim()).filter(Boolean);
         if(options.length < 2){ alert('محتاج تكتب اختيارين على الأقل مفصولين بفاصلة'); return; }
       }
-      const btnEl = e.target;
-      btnEl.disabled = true; btnEl.textContent = "جاري الحفظ...";
-      const result = await adminFetch('/api/questions', { action: 'update', id: qid, label, type, multi, options, required });
-      if(result && result.ok){
-        editingQid = null;
-        await loadQuestions();
-        renderQuestionEditor();
-      } else {
-        btnEl.disabled = false; btnEl.textContent = "حفظ التعديل";
-        alert('حصل خطأ أثناء الحفظ: ' + ((result && result.error) || 'خطأ غير معروف'));
-      }
+      queueQuestionUpdate(qid, { label, type, multi, options, required });
+      editingQid = null;
+      renderQuestionEditor();
     });
   });
   inner.querySelectorAll('.add-q-toggle').forEach(btn => {
@@ -743,7 +831,7 @@ function renderQuestionEditor(){
     });
   });
   inner.querySelectorAll('.saveQBtn').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
+    btn.addEventListener('click', (e) => {
       const sec = e.target.dataset.section;
       const wrap = e.target.closest('.qs-section');
       const label = wrap.querySelector('.newQLabel').value.trim();
@@ -759,17 +847,9 @@ function renderQuestionEditor(){
       } else if(typeVal === 'file'){
         type = 'file'; multi = false; options = null;
       }
-      const btnEl = e.target;
-      btnEl.disabled = true; btnEl.textContent = "جاري الحفظ...";
-      const result = await adminFetch('/api/questions', { action: 'add', sectionKey: sec, label, type, multi, options, required });
-      btnEl.disabled = false; btnEl.textContent = "حفظ السؤال";
-      if(result && result.ok){
-        keepFormOpenFor = sec;
-        await loadQuestions();
-        renderQuestionEditor();
-      } else {
-        alert('حصل خطأ أثناء حفظ السؤال: ' + ((result && result.error) || 'خطأ غير معروف، جرب تاني.'));
-      }
+      queueQuestionAdd(sec, label, type, multi, options, required);
+      keepFormOpenFor = sec;
+      renderQuestionEditor();
     });
   });
 }
