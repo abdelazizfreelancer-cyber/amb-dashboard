@@ -769,8 +769,20 @@ let pendingQuestionOps = []; // التعديلات اللي لسه ماتنشر�
 let questionTempIdCounter = 0;
 
 // بيرجع نسخة "مسودة" من الأسئلة بعد تطبيق كل التعديلات المعلّقة (لسه ماتنشرتش) فوق آخر نسخة منشورة فعليًا
+function computeDraftSections(){
+  let draft = sections.map(s => ({ ...s }));
+  pendingQuestionOps.forEach(op => {
+    if(op.action === 'delete_section'){
+      draft = draft.filter(s => s.key !== op.sectionKey);
+    } else if(op.action === 'add_section'){
+      draft.push({ key: op.tempKey, part:'PART 04 — إضافي', num: String(draft.length+1).padStart(2,'0'), title: op.title, desc: op.description, isCommercial:false, _pending:true });
+    }
+  });
+  return draft;
+}
 function computeDraftQuestions(){
-  let draft = questions.map(q => ({ ...q }));
+  const deletedSectionKeys = new Set(pendingQuestionOps.filter(op => op.action === 'delete_section').map(op => op.sectionKey));
+  let draft = questions.filter(q => !deletedSectionKeys.has(q.sectionKey)).map(q => ({ ...q }));
   pendingQuestionOps.forEach(op => {
     if(op.action === 'delete'){
       draft = draft.filter(q => q.id !== op.id);
@@ -784,6 +796,31 @@ function computeDraftQuestions(){
   return draft;
 }
 function isTempQid(id){ return typeof id === 'string' && id.startsWith('temp-'); }
+function isTempSectionKey(key){ return typeof key === 'string' && key.startsWith('tempsec-'); }
+
+function queueSectionAdd(title, description){
+  const tempKey = `tempsec-${++questionTempIdCounter}`;
+  pendingQuestionOps.push({ action:'add_section', tempKey, title, description });
+  return tempKey;
+}
+function queueSectionDelete(sectionKey){
+  if(isTempSectionKey(sectionKey)){
+    pendingQuestionOps = pendingQuestionOps.filter(op => !(op.action === 'add_section' && op.tempKey === sectionKey));
+  } else {
+    if(!pendingQuestionOps.some(op => op.action === 'delete_section' && op.sectionKey === sectionKey)){
+      pendingQuestionOps.push({ action:'delete_section', sectionKey });
+    }
+  }
+  // امسح أي عمليات معلّقة (إضافة/تعديل) خاصة بأسئلة جوه القسم ده، مالهاش لازمة دلوقتي
+  pendingQuestionOps = pendingQuestionOps.filter(op => {
+    if(op.action === 'add' && op.section === sectionKey) return false;
+    if(op.action === 'update'){
+      const q = questions.find(qq => qq.id === op.id);
+      if(q && q.sectionKey === sectionKey) return false;
+    }
+    return true;
+  });
+}
 
 function queueQuestionUpdate(id, fields){
   if(isTempQid(id)){
@@ -817,10 +854,17 @@ async function publishQuestionChanges(){
   const discardEl = document.getElementById('discardQuestionsBtn');
   btnEl.disabled = true; btnEl.textContent = "جاري النشر...";
   if(discardEl) discardEl.disabled = true;
+  const tempSectionKeyMap = {}; // بيربط أي قسم جديد اتضاف محليًا بالـ section_key الحقيقي بعد ما يتنشر
   for(const op of pendingQuestionOps){
     let result;
-    if(op.action === 'add'){
-      result = await adminFetch('/api/questions', { action:'add', sectionKey: op.section, label: op.label, type: op.type, multi: op.multi, options: op.options, required: op.required });
+    if(op.action === 'add_section'){
+      result = await adminFetch('/api/sections', { action:'add', title: op.title, description: op.description });
+      if(result && result.ok) tempSectionKeyMap[op.tempKey] = result.section.section_key;
+    } else if(op.action === 'delete_section'){
+      result = await adminFetch('/api/sections', { action:'delete', sectionKey: op.sectionKey });
+    } else if(op.action === 'add'){
+      const sectionKey = tempSectionKeyMap[op.section] || op.section;
+      result = await adminFetch('/api/questions', { action:'add', sectionKey, label: op.label, type: op.type, multi: op.multi, options: op.options, required: op.required });
     } else if(op.action === 'update'){
       result = await adminFetch('/api/questions', { action:'update', id: op.id, ...op.fields });
     } else if(op.action === 'delete'){
@@ -834,6 +878,7 @@ async function publishQuestionChanges(){
     }
   }
   pendingQuestionOps = [];
+  await loadSections();
   await loadQuestions();
   renderQuestionEditor();
 }
@@ -848,6 +893,7 @@ function discardQuestionChanges(){
 function renderQuestionEditor(){
   const inner = document.getElementById('adminInner');
   const draft = computeDraftQuestions();
+  const draftSections = computeDraftSections();
   const hasPending = pendingQuestionOps.length > 0;
   const publishBar = `
     <div class="qs-section" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
@@ -863,22 +909,22 @@ function renderQuestionEditor(){
   inner.innerHTML = publishBar + `
     <div class="qs-section">
       <h3 style="font-family:'Cairo';font-size:15px;color:var(--green-900);margin-bottom:10px;">إضافة قسم جديد</h3>
-      <p style="font-size:12px;color:var(--ink-dim);margin-bottom:10px;">القسم بيتضاف/يتمسح فورًا (مش جزء من نظام النشر بتاع الأسئلة).</p>
+      <p style="font-size:12px;color:var(--ink-dim);margin-bottom:10px;">القسم بيتضاف محليًا زي أي تعديل تاني — مش هيظهر للعميل غير لما تدوس "نشر" فوق.</p>
       <div class="row">
         <input type="text" id="newSectionTitle" placeholder="اسم القسم (مثال: تفاصيل الشحن)">
       </div>
       <input type="text" id="newSectionDesc" placeholder="وصف مختصر للقسم (اختياري)" style="margin-bottom:10px;">
-      <button class="btn primary small" id="addSectionBtn">ضيف القسم</button>
+      <button class="btn primary small" id="addSectionBtn">ضيف القسم محليًا</button>
     </div>
-  ` + sections.map(meta => {
+  ` + draftSections.map(meta => {
     const qs = draft.filter(q => q.sectionKey === meta.key);
     const isOpen = keepFormOpenFor === meta.key;
     return `
-      <div class="qs-section" data-section="${meta.key}">
+      <div class="qs-section" data-section="${meta.key}" style="${meta._pending ? 'border:1px dashed var(--gold);' : ''}">
         <div class="qs-section-head" style="justify-content:space-between;">
           <div style="display:flex;align-items:center;gap:10px;">
             <div class="badge-num">${meta.num}</div>
-            <h3>${meta.title}</h3>
+            <h3>${meta.title} ${meta._pending ? `<span class="status-pill st-pending">لسه مش منشور</span>` : ''}</h3>
           </div>
           ${meta.isCommercial ? '' : `<button class="del-btn delSectionBtn" data-section-key="${meta.key}" title="امسح القسم بكل أسئلته">✕ امسح القسم</button>`}
         </div>
@@ -952,38 +998,26 @@ function renderQuestionEditor(){
   const discardBtn = document.getElementById('discardQuestionsBtn');
   if(discardBtn) discardBtn.addEventListener('click', discardQuestionChanges);
 
-  document.getElementById('addSectionBtn').addEventListener('click', async (e) => {
-    const title = document.getElementById('newSectionTitle').value.trim();
-    const description = document.getElementById('newSectionDesc').value.trim();
+  document.getElementById('addSectionBtn').addEventListener('click', (e) => {
+    const titleEl = document.getElementById('newSectionTitle');
+    const descEl = document.getElementById('newSectionDesc');
+    const title = titleEl.value.trim();
+    const description = descEl.value.trim();
     if(!title){ alert('اكتب اسم القسم'); return; }
-    const btnEl = e.target;
-    btnEl.disabled = true; btnEl.textContent = "جاري الإضافة...";
-    const result = await adminFetch('/api/sections', { action:'add', title, description: description || null });
-    btnEl.disabled = false; btnEl.textContent = "ضيف القسم";
-    if(result && result.ok){ await loadSections(); renderQuestionEditor(); }
-    else{ alert('حصل خطأ: ' + ((result && result.error) || 'خطأ غير معروف')); }
+    queueSectionAdd(title, description || null);
+    renderQuestionEditor();
   });
   inner.querySelectorAll('.delSectionBtn').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
+    btn.addEventListener('click', (e) => {
       const sectionKey = e.target.dataset.sectionKey;
+      const isPending = isTempSectionKey(sectionKey);
       const qCount = questions.filter(q => q.sectionKey === sectionKey).length;
       const warnMsg = qCount > 0
-        ? `القسم ده فيه ${qCount} سؤال — لو مسحته هيتمسحوا هما كمان نهائيًا. متأكد؟`
+        ? `القسم ده فيه ${qCount} سؤال منشور فعلاً — لو مسحته هيتمسحوا هما كمان نهائيًا لما تدوس نشر. متأكد؟`
         : 'متأكد إنك عايز تمسح القسم ده؟';
-      if(!confirm(warnMsg)) return;
-      const btnEl = e.target;
-      btnEl.disabled = true; btnEl.textContent = "جاري المسح...";
-      const result = await adminFetch('/api/sections', { action:'delete', sectionKey });
-      if(result && result.ok){
-        pendingQuestionOps = pendingQuestionOps.filter(op => {
-          const opSection = op.action === 'add' ? op.section : (questions.find(q=>q.id===op.id)||{}).sectionKey;
-          return opSection !== sectionKey;
-        });
-        await loadSections(); await loadQuestions(); renderQuestionEditor();
-      } else {
-        btnEl.disabled = false; btnEl.textContent = "✕ امسح القسم";
-        alert('حصل خطأ: ' + ((result && result.error) || 'خطأ غير معروف'));
-      }
+      if(!isPending && !confirm(warnMsg)) return;
+      queueSectionDelete(sectionKey);
+      renderQuestionEditor();
     });
   });
 
