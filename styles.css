@@ -193,3 +193,42 @@ button.btn.danger{ border-color:var(--danger); color:var(--danger); }
 .ampm-btn{ flex:1; font-family:'Cairo'; font-weight:700; font-size:13px; padding:9px 0; border-radius:20px; border:1px solid var(--line); background:#fff; color:var(--ink-dim); cursor:pointer; transition:.15s; }
 .ampm-btn.active{ background:var(--gold); border-color:var(--gold); color:#1f1503; }
 .time-picker-preview{ font-family:'Cairo'; font-size:13px; font-weight:700; color:var(--green-900); text-align:center; padding-top:6px; border-top:1px dashed var(--line); }
+
+/* ===== Admin Dashboard Shell (sidebar layout) ===== */
+html, body{ background:var(--page-bg); }
+.admin-shell{ display:flex; direction:ltr; min-height:100vh; }
+.admin-sidebar{
+  direction:rtl; width:230px; flex-shrink:0; background:var(--green-950); color:#fff;
+  display:flex; flex-direction:column; padding:20px 14px; gap:4px;
+}
+.admin-brand{ padding:6px 10px 22px; border-bottom:1px solid rgba(244,242,234,0.12); margin-bottom:14px; }
+.admin-brand-title{ font-family:'Cairo'; font-weight:800; font-size:17px; color:#fff; }
+.admin-brand-sub{ font-family:'Cairo'; font-size:11px; color:rgba(244,242,234,0.55); margin-top:4px; }
+.admin-nav{ display:flex; flex-direction:column; gap:2px; flex:1; }
+.admin-nav-btn{
+  display:flex; align-items:center; gap:10px; width:100%; text-align:right;
+  background:transparent; border:none; border-radius:8px; padding:11px 12px;
+  font-family:'Cairo'; font-size:13px; font-weight:600; color:rgba(244,242,234,0.75);
+  cursor:pointer; transition:.15s;
+}
+.admin-nav-btn:hover{ background:rgba(244,242,234,0.08); color:#fff; }
+.admin-nav-btn.active{ background:var(--gold); color:#1f1503; font-weight:800; }
+.admin-nav-icon{ font-size:15px; flex-shrink:0; }
+.admin-logout-btn{ margin-top:10px; border-top:1px solid rgba(244,242,234,0.12); padding-top:14px; border-radius:0; }
+.admin-main{ direction:rtl; flex:1; min-width:0; padding:22px 28px 90px; }
+.admin-topbar{ display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; }
+.admin-page-title{ font-family:'Cairo'; font-size:19px; font-weight:800; color:var(--green-900); margin:0; }
+.admin-user-chip{ display:flex; align-items:center; gap:10px; }
+.admin-user-name{ font-family:'Cairo'; font-size:13px; font-weight:700; color:var(--ink-dim); }
+.admin-user-avatar{
+  width:32px; height:32px; border-radius:50%; background:var(--green-900); color:var(--gold-light);
+  display:flex; align-items:center; justify-content:center; font-family:'Cairo'; font-weight:800; font-size:13px;
+}
+@media (max-width:760px){
+  .admin-shell{ flex-direction:column; }
+  .admin-sidebar{ width:100%; flex-direction:row; align-items:center; overflow-x:auto; padding:12px; }
+  .admin-brand{ display:none; }
+  .admin-nav{ flex-direction:row; }
+  .admin-logout-btn{ margin-top:0; border-top:none; }
+  .admin-main{ padding:16px 16px 90px; }
+}
