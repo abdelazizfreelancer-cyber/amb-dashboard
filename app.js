@@ -292,41 +292,26 @@ async function renderMeetingsAdmin(skipLoad){
   inner.innerHTML = publishBar + `
     <div class="qs-section">
       <h3 style="font-family:'Cairo';font-size:15px;color:var(--green-900);margin-bottom:14px;">إضافة معاد جديد</h3>
-      <div class="row">
-        <input type="date" id="newSlotDate">
-      </div>
-      <div class="time-picker" id="timePickerStart">
-        <div class="time-picker-label">من الساعة (بداية الميتينج)</div>
-        <div class="time-picker-row">
-          ${[12,1,2,3,4,5].map(h => `<button type="button" class="hour-btn start-hour-btn" data-hour="${h}">${h}</button>`).join('')}
-        </div>
-        <div class="time-picker-row">
-          ${[6,7,8,9,10,11].map(h => `<button type="button" class="hour-btn start-hour-btn" data-hour="${h}">${h}</button>`).join('')}
-        </div>
-        <div class="ampm-toggle">
-          <button type="button" class="ampm-btn start-ampm-btn active" data-ampm="AM">صباحًا</button>
-          <button type="button" class="ampm-btn start-ampm-btn" data-ampm="PM">مساءً</button>
+      <div class="row" style="display:flex;gap:14px;">
+        <div style="flex:1;">
+          <label style="font-family:'Cairo';font-size:12px;font-weight:700;display:block;margin-bottom:6px;">التاريخ</label>
+          <input type="date" id="newSlotDate" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--line);">
         </div>
       </div>
-      <div class="time-picker" id="timePickerEnd" style="margin-top:10px;">
-        <div class="time-picker-label">لحد الساعة (نهاية الميتينج — اختياري)</div>
-        <button type="button" class="hour-btn end-hour-btn active" data-hour="" style="width:100%;margin-bottom:8px;">بدون تحديد نهاية</button>
-        <div class="time-picker-row">
-          ${[12,1,2,3,4,5].map(h => `<button type="button" class="hour-btn end-hour-btn" data-hour="${h}">${h}</button>`).join('')}
+      <div class="row" style="display:flex;gap:14px;margin-top:14px;">
+        <div style="flex:1;">
+          <label style="font-family:'Cairo';font-size:12px;font-weight:700;display:block;margin-bottom:6px;">من الساعة</label>
+          <input type="time" id="newSlotStartTime" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--line);">
         </div>
-        <div class="time-picker-row">
-          ${[6,7,8,9,10,11].map(h => `<button type="button" class="hour-btn end-hour-btn" data-hour="${h}">${h}</button>`).join('')}
-        </div>
-        <div class="ampm-toggle">
-          <button type="button" class="ampm-btn end-ampm-btn active" data-ampm="AM">صباحًا</button>
-          <button type="button" class="ampm-btn end-ampm-btn" data-ampm="PM">مساءً</button>
+        <div style="flex:1;">
+          <label style="font-family:'Cairo';font-size:12px;font-weight:700;display:block;margin-bottom:6px;">لحد الساعة (اختياري)</label>
+          <input type="time" id="newSlotEndTime" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--line);">
         </div>
       </div>
-      <div class="time-picker-preview" id="timePickerPreview" style="margin-top:10px;">من فضلك اختار الساعة</div>
-      <div class="row" style="margin-top:10px;">
-        <input type="text" id="newSlotLink" placeholder="رابط الميتينج (اختياري — ممكن تحطه بعدين)">
+      <div class="row" style="margin-top:14px;">
+        <input type="text" id="newSlotLink" placeholder="رابط الميتينج (اختياري — ممكن تحطه بعدين)" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--line);">
       </div>
-      <button class="btn primary small" id="addSlotBtn" style="margin-top:10px;">ضيف المعاد محليًا</button>
+      <button class="btn primary small" id="addSlotBtn" style="margin-top:14px;">ضيف المعاد محليًا</button>
     </div>
     ${sortedDates.length === 0 ? `<div class="admin-empty">مفيش مواعيد متضافة لسه.</div>` : sortedDates.map(dateKey => {
       const d = new Date(dateKey);
@@ -362,70 +347,18 @@ async function renderMeetingsAdmin(skipLoad){
   const discardBtn = document.getElementById('discardMeetingsBtn');
   if(discardBtn) discardBtn.addEventListener('click', discardMeetingChanges);
 
-  let selectedStartHour12 = null; // 1..12
-  let selectedStartAmPm = 'AM';
-  let selectedEndHour12 = null; // null = بدون تحديد نهاية
-  let selectedEndAmPm = 'AM';
-
-  document.querySelectorAll('.start-hour-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.start-hour-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      selectedStartHour12 = parseInt(btn.dataset.hour, 10);
-      updateTimePickerPreview();
-    });
-  });
-  document.querySelectorAll('.start-ampm-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.start-ampm-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      selectedStartAmPm = btn.dataset.ampm;
-      updateTimePickerPreview();
-    });
-  });
-  document.querySelectorAll('.end-hour-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.end-hour-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      selectedEndHour12 = btn.dataset.hour ? parseInt(btn.dataset.hour, 10) : null;
-      updateTimePickerPreview();
-    });
-  });
-  document.querySelectorAll('.end-ampm-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.end-ampm-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      selectedEndAmPm = btn.dataset.ampm;
-      updateTimePickerPreview();
-    });
-  });
-
-  function updateTimePickerPreview(){
-    const el = document.getElementById('timePickerPreview');
-    if(!el) return;
-    if(selectedStartHour12 === null){ el.textContent = 'من فضلك اختار الساعة'; return; }
-    let txt = `من الساعة ${selectedStartHour12} ${selectedStartAmPm === 'AM' ? 'صباحًا' : 'مساءً'}`;
-    if(selectedEndHour12 !== null){
-      txt += ` — لحد ${selectedEndHour12} ${selectedEndAmPm === 'AM' ? 'صباحًا' : 'مساءً'}`;
-    }
-    el.textContent = txt;
-  }
-
   document.getElementById('addSlotBtn').addEventListener('click', (e) => {
     const dateVal = document.getElementById('newSlotDate').value; // YYYY-MM-DD
+    const startVal = document.getElementById('newSlotStartTime').value; // HH:MM
+    const endVal = document.getElementById('newSlotEndTime').value; // HH:MM
     const link = document.getElementById('newSlotLink').value.trim();
-    if(!dateVal || selectedStartHour12 === null){ alert('اختار التاريخ وساعة البداية'); return; }
 
-    // تحويل 12 ساعة (+صباحًا/مساءً) لصيغة 24 ساعة
-    let startHour24 = selectedStartHour12 % 12; // 12 -> 0
-    if(selectedStartAmPm === 'PM') startHour24 += 12;
-    const startDateTimeStr = `${dateVal}T${String(startHour24).padStart(2,'0')}:00:00`;
+    if(!dateVal || !startVal){ alert('اختار التاريخ وساعة البداية'); return; }
 
+    const startDateTimeStr = `${dateVal}T${startVal}:00`;
     let endDateTimeStr = null;
-    if(selectedEndHour12 !== null){
-      let endHour24 = selectedEndHour12 % 12;
-      if(selectedEndAmPm === 'PM') endHour24 += 12;
-      endDateTimeStr = `${dateVal}T${String(endHour24).padStart(2,'0')}:00:00`;
+    if(endVal){
+      endDateTimeStr = `${dateVal}T${endVal}:00`;
     }
 
     queueMeetingAdd(
