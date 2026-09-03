@@ -104,7 +104,7 @@ async function renderAdminRoot(){
     { key:'responses', label:'الردود المستلمة', icon:'📬' },
     { key:'requests', label:'طلبات بريف جديد', icon:'📋' },
     { key:'commercial', label:'خيارات التحاسب', icon:'💰' },
-    { key:'clients', label:'بيانات العملاء', icon:'👥' },
+    { key:'clients', label:'إدارة العملاء', icon:'👥' },
     { key:'meetings', label:'المواعيد', icon:'📅' },
     { key:'contracts', label:'العقود', icon:'📄' },
     { key:'theme', label:'شكل الموقع', icon:'🎨' },
@@ -159,30 +159,121 @@ async function renderAdminRoot(){
   else if(adminSubTab === 'responses') renderResponsesList();
   else if(adminSubTab === 'requests') renderBriefRequests();
   else if(adminSubTab === 'admins') renderAdminsManager();
-  else if(adminSubTab === 'clients') renderClientsSheetTab();
+  else if(adminSubTab === 'clients') renderClientsAdmin();
   else if(adminSubTab === 'meetings') renderMeetingsAdmin();
   else if(adminSubTab === 'contracts') renderContractsAdmin();
   else if(adminSubTab === 'theme') renderThemeEditor();
   else renderCommercialEditor();
 }
 
-/* ===================== CLIENTS SHEET (بيانات العملاء) ===================== */
-function renderClientsSheetTab(){
+/* ===================== CLIENTS ADMIN (إدارة العملاء) ===================== */
+async function adminFetch(url, body) {
+  try {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-password': adminPassword },
+      body: JSON.stringify(body)
+    });
+    if(r.status === 401) { adminAuthed = false; adminPassword = null; renderAdminGate(); return null; }
+    return await r.json();
+  } catch(err) {
+    return null;
+  }
+}
+
+async function renderClientsAdmin(){
   const inner = document.getElementById('adminInner');
-  const url = window.APP_CONFIG.GOOGLE_SHEET_VIEW_URL;
-  if(!url || !url.startsWith('http')){
-    inner.innerHTML = `<div class="admin-empty">لسه معملتش ربط الشيت. حط رابط الشيت في config.js تحت GOOGLE_SHEET_VIEW_URL.</div>`;
+  inner.innerHTML = `<div class="load-msg">جاري تحميل قائمة العملاء...</div>`;
+  
+  let res;
+  try {
+    const r = await fetch('/api/users', { headers: { 'x-admin-password': adminPassword } });
+    if(r.status === 401){ adminAuthed = false; adminPassword = null; renderAdminGate(); return; }
+    res = await r.json();
+  } catch(err) {
+    inner.innerHTML = `<div class="admin-empty">حصل خطأ في الاتصال بالخادم.</div>`;
     return;
   }
+
+  const clients = res.users || [];
+  if(clients.length === 0){
+    inner.innerHTML = `<div class="admin-empty">لا يوجد أي عملاء مسجلين حالياً.</div>`;
+    return;
+  }
+
   inner.innerHTML = `
-    <div class="admin-gate" style="max-width:100%;margin:0;text-align:right;">
-      <h3 style="margin-bottom:10px;">بيانات كل العملاء بتتسجل في الشيت أوتوماتيك</h3>
-      <p style="margin-bottom:14px;">أي عميل يعمل حساب جديد، بياناته (الاسم، الهاتف، الإيميل، تاريخ التسجيل) بتتحط في الشيت لوحدها فورًا.</p>
-      <a href="${url}" target="_blank" style="display:inline-block;">
-        <button class="btn primary" style="width:auto;">افتح الشيت ↗</button>
-      </a>
+    <div class="qs-section">
+      <h3 style="font-family:'Cairo';font-size:15px;color:var(--green-900);margin-bottom:16px;">إدارة حسابات العملاء</h3>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;text-align:right;">
+        <thead>
+          <tr style="border-bottom:2px solid var(--line);color:var(--ink-dim);">
+            <th style="padding:10px;">الاسم / الإيميل</th>
+            <th style="padding:10px;">تاريخ التسجيل</th>
+            <th style="padding:10px;">الإجراءات</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${clients.map(c => `
+            <tr style="border-bottom:1px solid var(--line);">
+              <td style="padding:10px;">
+                <strong>${c.raw_user_meta_data?.full_name || 'بدون اسم'}</strong><br>
+                <span style="color:var(--ink-dim);">${c.email}</span><br>
+                <span style="color:var(--ink-dim);font-size:11px;">${c.raw_user_meta_data?.phone || 'لا يوجد هاتف'}</span>
+              </td>
+              <td style="padding:10px;">${new Date(c.created_at).toLocaleString('ar-EG')}</td>
+              <td style="padding:10px;">
+                <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                  <button class="btn small primary resetPassBtn" data-id="${c.id}">تغيير الباسورد</button>
+                  <button class="btn small danger clearBriefBtn" data-id="${c.id}">مسح البريف</button>
+                  <button class="btn small danger delClientBtn" data-id="${c.id}">حذف الحساب</button>
+                </div>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+      <div id="clientsStatus" style="font-size:12px;color:var(--ink-dim);margin-top:14px;"></div>
     </div>
   `;
+
+  // Event Listeners
+  inner.querySelectorAll('.resetPassBtn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const id = e.target.dataset.id;
+      const newPass = prompt('اكتب الباسورد الجديد للعميل:');
+      if(!newPass || newPass.trim().length < 6) {
+        alert('الباسورد يجب أن يكون 6 أحرف على الأقل.');
+        return;
+      }
+      if(!confirm('هل أنت متأكد من تغيير باسورد هذا العميل؟')) return;
+      e.target.disabled = true; e.target.textContent = 'جاري التغيير...';
+      const result = await adminFetch('/api/users', { action: 'reset_password', id, new_password: newPass });
+      if(result && result.ok) { alert('تم تغيير الباسورد بنجاح.'); renderClientsAdmin(); }
+      else { alert('حصل خطأ أثناء التغيير.'); renderClientsAdmin(); }
+    });
+  });
+
+  inner.querySelectorAll('.clearBriefBtn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const id = e.target.dataset.id;
+      if(!confirm('هل أنت متأكد من مسح جميع إجابات البريف لهذا العميل؟ سيتمكن من تعبئته من جديد.')) return;
+      e.target.disabled = true; e.target.textContent = 'جاري المسح...';
+      const result = await adminFetch('/api/users', { action: 'delete_brief', id });
+      if(result && result.ok) { alert('تم مسح إجابات البريف.'); renderClientsAdmin(); }
+      else { alert('حصل خطأ أثناء المسح.'); renderClientsAdmin(); }
+    });
+  });
+
+  inner.querySelectorAll('.delClientBtn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      const id = e.target.dataset.id;
+      if(!confirm('هل أنت متأكد من حذف هذا الحساب نهائياً؟ سيتم مسح كل بياناته ومواعيده وبريفه ولن يمكن استرجاعها!')) return;
+      e.target.disabled = true; e.target.textContent = 'جاري الحذف...';
+      const result = await adminFetch('/api/users', { action: 'delete_user', id });
+      if(result && result.ok) { alert('تم حذف الحساب نهائياً.'); renderClientsAdmin(); }
+      else { alert('حصل خطأ أثناء الحذف.'); renderClientsAdmin(); }
+    });
+  });
 }
 
 /* ===================== MEETINGS ADMIN ===================== */
