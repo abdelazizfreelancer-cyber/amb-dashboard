@@ -1,64 +1,70 @@
-import { checkAdmin, supabaseAdmin } from './_utils.js';
-import bcrypt from 'bcryptjs';
+/* =========================================================
+   DASHBOARD APP - admin.js (Meetings & Questions Manager)
+   ========================================================= */
 
-const VALID_PERMS = ['questions', 'responses', 'requests', 'commercial', 'clients', 'meetings', 'contracts', 'admins', 'theme'];
+// 1. إضافة موعد جديد من الداشبورد
+async function addMeetingSlot(startTimeIso, endTimeIso) {
+  const { data, error } = await supabaseClient
+    .from('meeting_slots')
+    .insert([
+      { 
+        start_time: startTimeIso, 
+        end_time: endTimeIso 
+      }
+    ]);
 
-export default async function handler(req, res) {
-  if (!(await checkAdmin(req, res, 'admins'))) return;
-  const supabase = supabaseAdmin();
+  if (error) {
+    alert('حدث خطأ أثناء إضافة الموعد: ' + error.message);
+  } else {
+    alert('تمت إضافة الموعد بنجاح!');
+    if (typeof loadAdminMeetings === 'function') loadAdminMeetings();
+  }
+}
 
-  if (req.method === 'GET') {
-    const { data, error } = await supabase
-      .from('dashboard_admins')
-      .select('id, name, permissions, created_at')
-      .order('created_at', { ascending: true });
-    if (error) return res.status(500).json({ error: error.message });
-    return res.status(200).json({ ok: true, admins: data });
+// 2. جلب وتحديث المواعيد في لوحة التحكم
+async function loadAdminMeetings() {
+  const listContainer = document.getElementById('adminMeetingsList');
+  if (!listContainer) return;
+
+  const { data: slots, error } = await supabaseClient
+    .from('meeting_slots')
+    .select('*')
+    .order('start_time', { ascending: true });
+
+  if (error) {
+    listContainer.innerHTML = `<p>خطأ في جلب المواعيد: ${error.message}</p>`;
+    return;
   }
 
-  if (req.method === 'POST') {
-    const { action } = req.body || {};
-
-    if (action === 'add') {
-      const { name, password, permissions } = req.body;
-      if (!name || !password) return res.status(400).json({ error: 'بيانات ناقصة' });
-      if (password.length < 6) return res.status(400).json({ error: 'الباسورد لازم يكون 6 أحرف على الأقل' });
-      const cleanPerms = Array.isArray(permissions) ? permissions.filter(p => VALID_PERMS.includes(p)) : [];
-      const password_hash = bcrypt.hashSync(password, 10);
-      const { error } = await supabase.from('dashboard_admins').insert([{ name, password_hash, permissions: cleanPerms }]);
-      if (error) return res.status(500).json({ error: error.message });
-      return res.status(200).json({ ok: true });
-    }
-
-    if (action === 'delete') {
-      const { id } = req.body;
-      if (!id) return res.status(400).json({ error: 'مفيش id' });
-      const { error } = await supabase.from('dashboard_admins').delete().eq('id', id);
-      if (error) return res.status(500).json({ error: error.message });
-      return res.status(200).json({ ok: true });
-    }
-
-    if (action === 'reset-password') {
-      const { id, newPassword } = req.body;
-      if (!id || !newPassword) return res.status(400).json({ error: 'بيانات ناقصة' });
-      if (newPassword.length < 6) return res.status(400).json({ error: 'الباسورد لازم يكون 6 أحرف على الأقل' });
-      const password_hash = bcrypt.hashSync(newPassword, 10);
-      const { error } = await supabase.from('dashboard_admins').update({ password_hash }).eq('id', id);
-      if (error) return res.status(500).json({ error: error.message });
-      return res.status(200).json({ ok: true });
-    }
-
-    if (action === 'update-permissions') {
-      const { id, permissions } = req.body;
-      if (!id) return res.status(400).json({ error: 'مفيش id' });
-      const cleanPerms = Array.isArray(permissions) ? permissions.filter(p => VALID_PERMS.includes(p)) : [];
-      const { error } = await supabase.from('dashboard_admins').update({ permissions: cleanPerms }).eq('id', id);
-      if (error) return res.status(500).json({ error: error.message });
-      return res.status(200).json({ ok: true });
-    }
-
-    return res.status(400).json({ error: 'action غير معروف' });
+  if (!slots || slots.length === 0) {
+    listContainer.innerHTML = `<p>لا توجد مواعيد مضافة حالياً.</p>`;
+    return;
   }
 
-  return res.status(405).json({ error: 'Method not allowed' });
+  listContainer.innerHTML = slots.map(s => `
+    <div class="slot-item" style="display:flex; justify-between; align-items:center; padding:10px; border-bottom:1px solid #ccc;">
+      <div>
+        <strong>من:</strong> ${new Date(s.start_time).toLocaleString('ar-EG')} 
+        <br>
+        <strong>إلى:</strong> ${new Date(s.end_time).toLocaleString('ar-EG')}
+      </div>
+      <button onclick="deleteMeetingSlot('${s.id}')" style="background:red; color:#fff; border:none; padding:5px 10px; cursor:pointer;">حذف</button>
+    </div>
+  `).join('');
+}
+
+// 3. حذف موعد من لوحة التحكم
+async function deleteMeetingSlot(slotId) {
+  if (!confirm('هل أنت تأكد من حذف هذا الموعد؟')) return;
+
+  const { error } = await supabaseClient
+    .from('meeting_slots')
+    .delete()
+    .eq('id', slotId);
+
+  if (error) {
+    alert('حدث خطأ أثناء الحذف: ' + error.message);
+  } else {
+    loadAdminMeetings();
+  }
 }
