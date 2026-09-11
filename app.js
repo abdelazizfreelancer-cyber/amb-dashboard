@@ -833,16 +833,23 @@ function renderContractEditor(client){
       <h2>${client.name || 'بدون اسم'}</h2>
       <div class="meta"><span>📞 ${client.phone||'—'}</span><span>✉️ ${client.email||'—'}</span></div>
     </div>
-    ${isSigned ? `
+    ${isSigned ? (() => {
+      const sig = client.contract.signature_data_url || '';
+      const isImageSig = sig.startsWith('data:image');
+      const sigHtml = isImageSig
+        ? `<img src="${sig}" style="max-width:260px;border:1px solid var(--line);border-radius:6px;">`
+        : `<div style="font-family:'Almarai';font-size:22px;font-style:italic;border-bottom:2px solid var(--ink);display:inline-block;padding:4px 24px;min-width:180px;">${sig}</div>`;
+      return `
       <div id="printableContract" class="print-doc" style="background:#fff;border:1px solid var(--line);border-radius:10px;padding:24px;">
         <pre style="white-space:pre-wrap;font-family:'Almarai';font-size:14px;line-height:2;">${client.contract.contract_text}</pre>
         <div style="margin-top:20px;border-top:1px dashed var(--line);padding-top:16px;">
           <div style="font-family:'Cairo';font-size:12px;color:var(--ink-dim);margin-bottom:8px;">توقيع العميل — بتاريخ ${new Date(client.contract.signed_at).toLocaleString('ar-EG')}</div>
-          <img src="${client.contract.signature_data_url}" style="max-width:260px;border:1px solid var(--line);border-radius:6px;">
+          ${sigHtml}
         </div>
       </div>
-      <button class="btn primary small" id="printContractBtn" style="margin-top:14px;">طباعة / تحميل PDF</button>
-    ` : `
+      <button class="btn primary small" id="printContractBtn" style="margin-top:14px;">🖨️ طباعة / تحميل PDF</button>
+    `;
+    })() : `
       <div class="qs-section">
         <h3 style="font-family:'Cairo';font-size:15px;color:var(--green-900);margin-bottom:12px;">${client.contract ? 'تعديل نص العقد' : 'تجهيز العقد'}</h3>
         <textarea id="contractTextArea" style="width:100%;min-height:420px;font-family:'Almarai';font-size:13px;line-height:2;padding:14px;border:1px solid var(--line);border-radius:8px;">${text}</textarea>
