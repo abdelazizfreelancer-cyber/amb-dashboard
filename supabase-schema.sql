@@ -304,7 +304,7 @@ create policy "client reads own contract"
   to authenticated
   using (auth.uid() = user_id);
 
--- السماح للعميل بتوقيع عقده وتحديث حالته وتاريخه
+-- السماح للعميل بتوقيع عقده بنفسه
 drop policy if exists "client signs own contract" on contracts;
 create policy "client signs own contract"
   on contracts for update

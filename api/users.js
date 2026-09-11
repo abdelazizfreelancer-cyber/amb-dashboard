@@ -8,11 +8,20 @@ export default async function handler(req, res) {
     // List users
     const { data, error } = await supabase.auth.admin.listUsers();
     if (error) return res.status(500).json({ error: error.message });
-    return res.status(200).json({ users: data.users });
+    
+    const users = (data.users || []).map(u => {
+      const meta = u.user_metadata || u.raw_user_meta_data || {};
+      return {
+        ...u,
+        fullName: meta.full_name || meta.name || meta.display_name || '',
+        phone: meta.phone || meta.phoneNumber || ''
+      };
+    });
+    return res.status(200).json({ users });
   } 
   
   if (req.method === 'POST') {
-    const { action, id, new_password } = req.body;
+    const { action, id, new_password } = req.body || {};
     
     if (action === 'reset_password') {
       if (!id || !new_password) return res.status(400).json({ error: 'Missing parameters' });
@@ -31,7 +40,10 @@ export default async function handler(req, res) {
     
     if (action === 'delete_user') {
       if (!id) return res.status(400).json({ error: 'Missing user ID' });
-      // Delete user
+      // مسح كل ما يرتبط بالعميل أولاً ثم حذف حسابه
+      await supabase.from('responses').delete().eq('user_id', id);
+      await supabase.from('meeting_bookings').delete().eq('user_id', id);
+      await supabase.from('contracts').delete().eq('user_id', id);
       const { data, error } = await supabase.auth.admin.deleteUser(id);
       if (error) return res.status(500).json({ error: error.message });
       return res.status(200).json({ ok: true });

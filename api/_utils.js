@@ -2,7 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 import bcrypt from 'bcryptjs';
 
 export function supabaseAdmin() {
-  return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+  const url = process.env.SUPABASE_URL || "https://ikzejyosymihahfliesl.supabase.co";
+  return createClient(url, process.env.SUPABASE_SERVICE_ROLE_KEY);
 }
 
 // permission: null (بس تحقق من تسجيل الدخول) أو واحد من:
