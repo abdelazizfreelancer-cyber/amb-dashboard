@@ -196,12 +196,29 @@ async function renderClientsAdmin(){
   }
 
   const clients = res.users || [];
+  const sheetUrl = window.APP_CONFIG.GOOGLE_SHEET_VIEW_URL;
+  const sheetBox = (sheetUrl && sheetUrl.startsWith('http')) ? `
+    <div style="background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:16px 20px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;">
+      <div>
+        <h3 style="margin:0 0 6px 0;font-size:16px;color:var(--green-900);font-family:'Cairo';">📊 شيت Google Sheets لبيانات العملاء</h3>
+        <p style="margin:0;font-size:13px;color:var(--ink-dim);">بيانات كل العملاء الجدد (الاسم، الهاتف، الإيميل) بتتسجل في الشيت أوتوماتيك.</p>
+      </div>
+      <a href="${sheetUrl}" target="_blank" rel="noopener noreferrer" style="text-decoration:none;">
+        <button class="btn primary" style="width:auto;cursor:pointer;padding:10px 18px;font-size:13px;">افتح الشيت ↗</button>
+      </a>
+    </div>
+  ` : '';
+
   if(clients.length === 0){
-    inner.innerHTML = `<div class="admin-empty">لا يوجد أي عملاء مسجلين حالياً.</div>`;
+    inner.innerHTML = `
+      ${sheetBox}
+      <div class="admin-empty">لا يوجد أي عملاء مسجلين حالياً في قاعدة البيانات.</div>
+    `;
     return;
   }
 
   inner.innerHTML = `
+    ${sheetBox}
     <div class="qs-section">
       <h3 style="font-family:'Cairo';font-size:15px;color:var(--green-900);margin-bottom:16px;">إدارة حسابات العملاء</h3>
       <table style="width:100%;border-collapse:collapse;font-size:13px;text-align:right;">
@@ -213,12 +230,15 @@ async function renderClientsAdmin(){
           </tr>
         </thead>
         <tbody>
-          ${clients.map(c => `
+          ${clients.map(c => {
+            const name = c.fullName || c.user_metadata?.full_name || c.user_metadata?.name || c.raw_user_meta_data?.full_name || c.raw_user_meta_data?.name || 'بدون اسم';
+            const phone = c.phone || c.user_metadata?.phone || c.raw_user_meta_data?.phone || 'لا يوجد هاتف';
+            return `
             <tr style="border-bottom:1px solid var(--line);">
               <td style="padding:10px;">
-                <strong>${c.raw_user_meta_data?.full_name || 'بدون اسم'}</strong><br>
+                <strong style="color:var(--green-900);font-size:14px;">${name}</strong><br>
                 <span style="color:var(--ink-dim);">${c.email}</span><br>
-                <span style="color:var(--ink-dim);font-size:11px;">${c.raw_user_meta_data?.phone || 'لا يوجد هاتف'}</span>
+                <span style="color:var(--ink-dim);font-size:11px;">📱 ${phone}</span>
               </td>
               <td style="padding:10px;">${new Date(c.created_at).toLocaleString('ar-EG')}</td>
               <td style="padding:10px;">
@@ -229,7 +249,8 @@ async function renderClientsAdmin(){
                 </div>
               </td>
             </tr>
-          `).join('')}
+            `;
+          }).join('')}
         </tbody>
       </table>
       <div id="clientsStatus" style="font-size:12px;color:var(--ink-dim);margin-top:14px;"></div>

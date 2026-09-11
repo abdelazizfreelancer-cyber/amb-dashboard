@@ -303,5 +303,11 @@ create policy "client reads own contract"
   on contracts for select
   to authenticated
   using (auth.uid() = user_id);
--- الكتابة (تفعيل العقد) بس من الداش بورد بصلاحيات service role
--- التوقيع نفسه بيتم من خلال دالة سيرفر خاصة في موقع العميل (مش مباشر من المتصفح)
+
+-- السماح للعميل بتوقيع عقده وتحديث حالته وتاريخه
+drop policy if exists "client signs own contract" on contracts;
+create policy "client signs own contract"
+  on contracts for update
+  to authenticated
+  using (auth.uid() = user_id and status = 'ready_to_sign')
+  with check (auth.uid() = user_id and status = 'signed');
