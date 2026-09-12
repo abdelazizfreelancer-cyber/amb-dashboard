@@ -1,3 +1,13 @@
+// ضمان ضبط الـ Viewport للشاشات والموبايل تلقائيًا
+(function ensureMobileViewport(){
+  if(typeof document !== 'undefined' && !document.querySelector('meta[name="viewport"]')){
+    const m = document.createElement('meta');
+    m.name = 'viewport';
+    m.content = 'width=device-width, initial-scale=1.0, maximum-scale=5.0';
+    document.head.appendChild(m);
+  }
+})();
+
 /* ===================== SUPABASE CLIENT (بس لقراءة الأسئلة العامة) ===================== */
 const supabaseClient = window.supabase.createClient(
   window.APP_CONFIG.SUPABASE_URL,
@@ -222,38 +232,40 @@ async function renderClientsAdmin(){
     ${sheetBox}
     <div class="qs-section">
       <h3 style="font-family:'Cairo';font-size:15px;color:var(--green-900);margin-bottom:16px;">إدارة حسابات العملاء</h3>
-      <table style="width:100%;border-collapse:collapse;font-size:13px;text-align:right;">
-        <thead>
-          <tr style="border-bottom:2px solid var(--line);color:var(--ink-dim);">
-            <th style="padding:10px;">الاسم / الإيميل</th>
-            <th style="padding:10px;">تاريخ التسجيل</th>
-            <th style="padding:10px;">الإجراءات</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${clients.map(c => {
-            const name = c.fullName || c.user_metadata?.full_name || c.user_metadata?.name || c.raw_user_meta_data?.full_name || c.raw_user_meta_data?.name || 'بدون اسم';
-            const phone = c.phone || c.user_metadata?.phone || c.raw_user_meta_data?.phone || 'لا يوجد هاتف';
-            return `
-            <tr style="border-bottom:1px solid var(--line);">
-              <td style="padding:10px;">
-                <strong style="color:var(--green-900);font-size:14px;">${name}</strong><br>
-                <span style="color:var(--ink-dim);">${c.email}</span><br>
-                <span style="color:var(--ink-dim);font-size:11px;">📱 ${phone}</span>
-              </td>
-              <td style="padding:10px;">${new Date(c.created_at).toLocaleString('ar-EG')}</td>
-              <td style="padding:10px;">
-                <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                  <button class="btn small primary resetPassBtn" data-id="${c.id}">تغيير الباسورد</button>
-                  <button class="btn small danger clearBriefBtn" data-id="${c.id}">مسح البريف</button>
-                  <button class="btn small danger delClientBtn" data-id="${c.id}">حذف الحساب</button>
-                </div>
-              </td>
+      <div class="table-responsive">
+        <table class="responsive-client-table" style="width:100%;border-collapse:collapse;font-size:13px;text-align:right;">
+          <thead>
+            <tr style="border-bottom:2px solid var(--line);color:var(--ink-dim);">
+              <th style="padding:10px;">الاسم / الإيميل</th>
+              <th style="padding:10px;">تاريخ التسجيل</th>
+              <th style="padding:10px;">الإجراءات</th>
             </tr>
-            `;
-          }).join('')}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            ${clients.map(c => {
+              const name = c.fullName || c.user_metadata?.full_name || c.user_metadata?.name || c.raw_user_meta_data?.full_name || c.raw_user_meta_data?.name || 'بدون اسم';
+              const phone = c.phone || c.user_metadata?.phone || c.raw_user_meta_data?.phone || 'لا يوجد هاتف';
+              return `
+              <tr style="border-bottom:1px solid var(--line);">
+                <td style="padding:10px;">
+                  <strong style="color:var(--green-900);font-size:14px;">${name}</strong><br>
+                  <span style="color:var(--ink-dim);">${c.email}</span><br>
+                  <span style="color:var(--ink-dim);font-size:11px;">📱 ${phone}</span>
+                </td>
+                <td style="padding:10px;">${new Date(c.created_at).toLocaleString('ar-EG')}</td>
+                <td style="padding:10px;">
+                  <div class="client-actions-group" style="display:flex;gap:6px;flex-wrap:wrap;">
+                    <button class="btn small primary resetPassBtn" data-id="${c.id}">تغيير الباسورد</button>
+                    <button class="btn small danger clearBriefBtn" data-id="${c.id}">مسح البريف</button>
+                    <button class="btn small danger delClientBtn" data-id="${c.id}">حذف الحساب</button>
+                  </div>
+                </td>
+              </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
       <div id="clientsStatus" style="font-size:12px;color:var(--ink-dim);margin-top:14px;"></div>
     </div>
   `;
