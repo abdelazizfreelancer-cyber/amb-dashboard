@@ -104,10 +104,15 @@ function renderAdminGate(){
 
 async function renderAdminRoot(){
   if(!adminAuthed){ renderAdminGate(); return; }
-  await loadSections();
-  await loadQuestions();
-  await loadCommercialOptions();
   const container = document.getElementById('adminView');
+  container.innerHTML = `<div class="load-msg" style="text-align:center;padding:100px;">جاري التحميل...</div>`;
+
+  await Promise.all([
+    loadSections(),
+    loadQuestions(),
+    loadCommercialOptions()
+  ]);
+
 
   const tabs = [
     { key:'questions', label:'الأسئلة', icon:'📝' },
